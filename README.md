@@ -2,12 +2,15 @@
 
 Welcome to the Housing App project! This repository follows modern Next.js 14+ architectural patterns. Before contributing, please review the guidelines on architecture, styling, and how to fetch or mutate data effectively using React Server Components (RSC) and Server Actions.
 
+**IMPORTANT:** Before submitting a PR, please read our [Contributing Guidelines](./CONTRIBUTING.md).
+
 ---
 
 ## Project Resources
 
 - [Project Documentation](https://docs.google.com/document/d/18LSgpdrAMlSPjhV9TC2E5KHJUaXUuSPK/edit)
 - [Project Tasks](https://docs.google.com/spreadsheets/d/19fOP3oQnLaUQ4bfNvKcPVFjN-Q9V6io0/edit?gid=315764263#gid=315764263)
+- [Contributing Guidelines](./CONTRIBUTING.md)
 
 ---
 
