@@ -2,14 +2,17 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 // Using Metadata API for static/dynamic SEO efficiently
 export const metadata: Metadata = {
-  title: "Modern Housing App",
-  description: "Find your dream home with our modern property search platform.",
-  keywords: "real estate, housing, properties, home search",
+  title: "StudentNest | Verified Student Housing",
+  description: "Find your home near campus. Secure, verified housing for university students.",
+  keywords: "student housing, university housing, rwanda housing, secure housing",
 };
+
+import Header from "@/components/features/Header";
+import Footer from "@/components/features/Footer";
 
 export default function RootLayout({
   children,
@@ -18,22 +21,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100`}>
-        <nav className="border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between h-16 items-center">
-              <div className="flex-shrink-0 font-bold text-xl tracking-tighter">
-                HousingApp.
-              </div>
-              <div className="flex gap-4">
-                <a href="#" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">Properties</a>
-                <a href="#" className="text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white transition-colors">Agents</a>
-                <a href="#" className="font-medium text-black dark:text-white transition-colors">Sign In</a>
-              </div>
-            </div>
-          </div>
-        </nav>
-        {children}
+      <head>
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+        <style>{`
+          .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+          }
+        `}</style>
+      </head>
+      <body className={`${inter.variable} antialiased bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display`}>
+        <Header />
+        <main>
+          {children}
+        </main>
+        <Footer />
       </body>
     </html>
   );
