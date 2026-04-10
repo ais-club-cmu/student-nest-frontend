@@ -108,30 +108,3 @@ export default function LandlordPendingPage() {
         </div>
     );
 }
-                </div>
-
-                {/* Visual Asset */}
-                <div className="relative w-full aspect-video rounded-xl overflow-hidden mb-8 group">
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent z-10"></div>
-                    <img
-                        alt="Professional landlord workspace"
-                        className="w-full h-full object-cover"
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvUfOjt5k-RSEi1RuyEVNer52xv-idLMmQaS9QBWyqWRM7OKpDiYLcFOUFskZ-3LxREcFMnJkcKUeHVGsSVNjitLk7ffS63novl4GDpX7uFCIVl1xShgJGQvjZPbBpsHmVFX6nZoslemzY4SW2HgclGApZaghWPAeofsK3SuSJbjqKdy5vCU41MpeyTxR_EzsvG8OoVWTIDZyn2TNF7UApGlg0fe5GzuUXo40Jqk89-KJ4qk6l-oaaPP_qwX3Ec68xpi4_o8NUiZKP"
-                    />
-                    <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2">
-                        <div className="bg-primary text-white text-[10px] uppercase font-bold tracking-widest px-2 py-1 rounded">Security First</div>
-                        <div className="text-white text-xs font-medium">Protecting the integrity of our marketplace</div>
-                    </div>
-                </div>
-
-                {/* Support Link */}
-                <div className="text-center">
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">
-                        Have questions about your registration?
-                        <Link className="text-primary font-semibold hover:underline ml-1" href="#">Contact Support</Link>
-                    </p>
-                </div>
-            </div>
-        </div>
-    );
-}

@@ -104,18 +104,3 @@ export default function VerifyPage() {
         </div>
     );
 }
-
-                <div className="mt-10 pt-6 border-t border-slate-100 dark:border-slate-800 text-center">
-                    <p className="text-xs text-slate-400 dark:text-slate-500 uppercase tracking-widest font-semibold mb-4">
-                        Secured by StudentNest Auth
-                    </p>
-                    <div className="flex justify-center gap-4 text-slate-400 dark:text-slate-600">
-                        <span className="material-symbols-outlined text-lg">verified_user</span>
-                        <span className="material-symbols-outlined text-lg">lock</span>
-                        <span className="material-symbols-outlined text-lg">shield</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-}
