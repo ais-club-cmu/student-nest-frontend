@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 
 export default function Home() {
@@ -19,8 +20,22 @@ export default function Home() {
               Secure, verified housing for university students. Partnering with top institutions in Rwanda to ensure your peace of mind.
             </p>
 
+            {/* CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 mt-4">
+              <Link href="/register">
+                <Button variant="primary" size="lg" className="px-8">
+                  Get Started
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button variant="ghost" size="lg" className="px-8">
+                  Sign In
+                </Button>
+              </Link>
+            </div>
+
             {/* Search Bar */}
-            <div className="w-full max-w-2xl mt-4">
+            <div className="w-full max-w-2xl mt-8">
               <div className="relative flex items-center p-2 bg-white dark:bg-slate-900 rounded-xl shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-200 dark:border-slate-800">
                 <span className="material-symbols-outlined absolute left-5 text-slate-400">search</span>
                 <input
