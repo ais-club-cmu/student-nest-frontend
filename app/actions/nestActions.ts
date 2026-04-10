@@ -49,12 +49,17 @@ function afterAdminKycMutation() {
  * @returns `ApiResult<RegisterResponse>` with the new `user_id` and confirmation flag.
  */
 export async function registerStudentAction(body: StudentRegisterRequest) {
+  console.log('[Server Action] Registering student with:', { email: body.email, full_name: body.full_name });
   const result = await nestRequest<RegisterResponse>('/api/v1/auth/register/student', {
     method: 'POST',
     body: JSON.stringify(body),
     cache: 'no-store',
   });
-  if (result.data) afterAuthMutation();
+  console.log('[Server Action] Registration result:', result);
+  if (result.data) {
+    console.log('[Server Action] Running cache mutations');
+    afterAuthMutation();
+  }
   return result;
 }
 

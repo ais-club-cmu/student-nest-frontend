@@ -107,14 +107,27 @@ export async function nestRequest<TResponse>(
   }
 
   try {
+    console.log(`[nestRequest] ${init.method || 'GET'} ${url}`);
+    if (init.body) {
+      console.log(`[nestRequest] Request Body:`, init.body);
+    }
+    
     const res = await fetch(url, { ...init, headers });
     const payload = await parseJson<unknown>(res);
 
+    console.log(`[nestRequest] Response status: ${res.status}`);
+    console.log(`[nestRequest] Response payload:`, payload);
+
     if (!res.ok) {
+      const errorMsg = messageFromPayload(payload, res.statusText || 'Request failed');
+      console.error(`[nestRequest] Error (${res.status}): ${errorMsg}`);
+      if (payload) {
+        console.error(`[nestRequest] Error details:`, payload);
+      }
       return {
         data: null,
         error: {
-          message: messageFromPayload(payload, res.statusText || 'Request failed'),
+          message: errorMsg,
           status: res.status,
           detail:
             payload && typeof payload === 'object' && 'detail' in payload
@@ -124,8 +137,21 @@ export async function nestRequest<TResponse>(
       };
     }
 
+    // If response is OK but payload is null/empty, return error
+    if (!payload) {
+      console.error('[nestRequest] Empty response body received');
+      return {
+        data: null,
+        error: {
+          message: 'Empty response from server',
+          status: res.status,
+        },
+      };
+    }
+
     return { data: payload as TResponse, error: null };
   } catch (e) {
+    console.error('[nestRequest] Exception:', e);
     return {
       data: null,
       error: { message: e instanceof Error ? e.message : 'Network error' },

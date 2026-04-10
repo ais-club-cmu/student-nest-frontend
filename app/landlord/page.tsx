@@ -1,7 +1,28 @@
-import React from 'react';
+'use client';
+
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function LandlordDashboardPage() {
+    const router = useRouter();
+    const [activeNav, setActiveNav] = useState('dashboard');
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        const role = localStorage.getItem('userRole');
+        if (!token || role !== 'landlord') {
+            router.push('/login');
+        }
+    }, [router]);
+
+    const handleLogout = () => {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('userRole');
+        router.push('/');
+    };
+
     return (
         <div className="flex min-h-[calc(100vh-80px)] font-display bg-background-light dark:bg-slate-950/50">
             {/* Sidebar Navigation */}
@@ -17,46 +38,97 @@ export default function LandlordDashboardPage() {
                 </div>
 
                 <nav className="flex-1 px-4 space-y-1 mt-4">
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary group">
+                    <button
+                        onClick={() => setActiveNav('dashboard')}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                            activeNav === 'dashboard'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
                         <span className="material-symbols-outlined text-[22px]">dashboard</span>
                         <span className="text-sm font-medium">Overview</span>
-                    </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    </button>
+                    <button
+                        onClick={() => setActiveNav('listings')}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                            activeNav === 'listings'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
                         <span className="material-symbols-outlined text-[22px]">location_city</span>
                         <span className="text-sm font-medium">My Listings</span>
-                    </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    </button>
+                    <Link href="/landlord/applications" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                         <span className="material-symbols-outlined text-[22px]">description</span>
                         <span className="text-sm font-medium">Applications</span>
                         <span className="ml-auto bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">12</span>
                     </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <button
+                        onClick={() => setActiveNav('payments')}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                            activeNav === 'payments'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
                         <span className="material-symbols-outlined text-[22px]">payments</span>
                         <span className="text-sm font-medium">Payments</span>
-                    </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    </button>
+                    <button
+                        onClick={() => setActiveNav('reviews')}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                            activeNav === 'reviews'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
                         <span className="material-symbols-outlined text-[22px]">star</span>
                         <span className="text-sm font-medium">Reviews</span>
-                    </Link>
+                    </button>
 
                     <div className="pt-4 pb-2">
                         <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Support</p>
                     </div>
 
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <button
+                        onClick={() => setActiveNav('settings')}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                            activeNav === 'settings'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
                         <span className="material-symbols-outlined text-[22px]">settings</span>
                         <span className="text-sm font-medium">Settings</span>
-                    </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    </button>
+                    <button
+                        onClick={() => setActiveNav('help')}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                            activeNav === 'help'
+                                ? 'bg-primary/10 text-primary'
+                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                    >
                         <span className="material-symbols-outlined text-[22px]">help</span>
                         <span className="text-sm font-medium">Help Center</span>
-                    </Link>
+                    </button>
                 </nav>
 
-                <div className="p-4 mt-auto mb-20 md:mb-0">
-                    <button className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm">
-                        <span className="material-symbols-outlined text-sm">add</span>
-                        <span>Add New Listing</span>
+                <div className="p-4 mt-auto mb-20 md:mb-0 space-y-3">
+                    <Link href="/landlord/listings/add">
+                        <button className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm">
+                            <span className="material-symbols-outlined text-sm">add</span>
+                            <span>Add New Listing</span>
+                        </button>
+                    </Link>
+                    <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 py-2.5 rounded-lg font-semibold text-sm transition-all"
+                    >
+                        <span className="material-symbols-outlined text-sm">logout</span>
+                        <span>Logout</span>
                     </button>
                 </div>
             </aside>
