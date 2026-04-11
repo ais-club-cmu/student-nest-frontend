@@ -1,20 +1,38 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { getUserProfileAction } from '@/app/actions/nestActions';
 
 export default function LandlordDashboardPage() {
     const router = useRouter();
     const [activeNav, setActiveNav] = useState('dashboard');
+    const [kycChecked, setKycChecked] = useState(false);
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         const role = localStorage.getItem('userRole');
         if (!token || role !== 'landlord') {
             router.push('/login');
+            return;
         }
+
+        // Check KYC status — redirect to ID verification if not yet approved
+        getUserProfileAction(token).then((result) => {
+            if (result.data) {
+                const { kyc_status } = result.data;
+                if (kyc_status !== 'approved') {
+                    router.replace('/landlord-registration/id-verification');
+                    return;
+                }
+            }
+            setKycChecked(true);
+        });
     }, [router]);
+
+    // Don't render the dashboard until we've confirmed KYC is approved
+    if (!kycChecked) return null;
 
     const handleLogout = () => {
         localStorage.removeItem('accessToken');
@@ -87,6 +105,11 @@ export default function LandlordDashboardPage() {
                         <span className="material-symbols-outlined text-[22px]">star</span>
                         <span className="text-sm font-medium">Reviews</span>
                     </button>
+
+                    <Link href="/landlord-registration/id-verification" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                        <span className="material-symbols-outlined text-[22px]">verified_user</span>
+                        <span className="text-sm font-medium">ID Verification</span>
+                    </Link>
 
                     <div className="pt-4 pb-2">
                         <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Support</p>

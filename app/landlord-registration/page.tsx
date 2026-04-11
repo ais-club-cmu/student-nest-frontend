@@ -62,8 +62,8 @@ export default function LandlordRegistrationPage() {
             }
 
             if (result.data) {
-                // Redirect to KYC verification page
-                router.push('/landlord-registration/id-verification');
+                // Ask landlord to confirm email before ID verification
+                router.push('/landlord-registration/confirm-email');
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
