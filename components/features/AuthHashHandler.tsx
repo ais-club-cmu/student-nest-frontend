@@ -21,10 +21,19 @@ export default function AuthHashHandler() {
         const type = params.get('type');
         const accessToken = params.get('access_token');
 
-        if (type === 'recovery' && accessToken) {
-            // Clear the hash so we don't re-trigger on back navigation
-            window.history.replaceState(null, '', window.location.pathname);
+        if (!type || !accessToken) return;
+
+        // Clear the hash so we don't re-trigger on back navigation
+        window.history.replaceState(null, '', window.location.pathname);
+
+        if (type === 'recovery') {
             router.replace(`/password-reset?token=${encodeURIComponent(accessToken)}`);
+        } else if (type === 'signup') {
+            // Email confirmed — store the token so the ID verification page can use it
+            localStorage.setItem('accessToken', accessToken);
+            const refreshToken = params.get('refresh_token');
+            if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+            router.replace('/landlord-registration/id-verification');
         }
     }, [router]);
 
