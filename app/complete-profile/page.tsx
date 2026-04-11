@@ -1,7 +1,54 @@
-import React from 'react';
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { updateStudentProfileAction } from '@/app/actions/nestActions';
 
 export default function CompleteProfilePage() {
+    const router = useRouter();
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [roomType, setRoomType] = useState<'private' | 'shared'>('private');
+
+    const handleSubmit = async (e: { preventDefault: () => void; currentTarget: HTMLFormElement }) => {
+        e.preventDefault();
+        setIsLoading(true);
+        setError(null);
+
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+            setError('You must be logged in to complete your profile.');
+            setIsLoading(false);
+            return;
+        }
+
+        const form = e.currentTarget;
+        const data = new FormData(form);
+
+        const cohortYearRaw = data.get('cohortYear') as string;
+        const budgetRaw = data.get('budget') as string;
+
+        const result = await updateStudentProfileAction(accessToken, {
+            cohort_year: cohortYearRaw ? Number(cohortYearRaw) : null,
+            home_country: (data.get('homeCountry') as string) || null,
+            program: (data.get('programName') as string) || null,
+            bio: (data.get('bio') as string) || null,
+            housing_prefs: {
+                room_type: roomType,
+                max_budget: budgetRaw ? Number(budgetRaw) : null,
+            },
+        });
+
+        if (result.error) {
+            setError(result.error.message);
+            setIsLoading(false);
+            return;
+        }
+
+        router.push('/');
+    };
+
     return (
         <div className="flex flex-1 justify-center py-10 px-4 md:px-0 min-h-[calc(100vh-80px)]">
             <div className="flex flex-col max-w-[640px] flex-1">
@@ -40,7 +87,14 @@ export default function CompleteProfilePage() {
                     </div>
                 </div>
 
-                <form className="flex flex-col">
+                {error && (
+                    <div className="mx-4 flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <span className="material-symbols-outlined text-red-600 dark:text-red-400">error</span>
+                        <p className="text-sm font-medium text-red-700 dark:text-red-400">{error}</p>
+                    </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="flex flex-col">
                     {/* Academic Details */}
                     <section className="mt-6">
                         <div className="flex items-center gap-2 px-4 pb-3 pt-5">
@@ -101,11 +155,25 @@ export default function CompleteProfilePage() {
                                 <p className="text-slate-900 dark:text-slate-100 text-sm font-medium leading-normal">Room Type</p>
                                 <div className="grid grid-cols-2 gap-3">
                                     <label className="relative flex cursor-pointer items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 hover:border-primary transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                                        <input defaultChecked className="sr-only" name="room_type" type="radio" value="private" />
+                                        <input
+                                            className="sr-only"
+                                            name="room_type"
+                                            type="radio"
+                                            value="private"
+                                            checked={roomType === 'private'}
+                                            onChange={() => setRoomType('private')}
+                                        />
                                         <span className="text-sm font-semibold">Private Room</span>
                                     </label>
                                     <label className="relative flex cursor-pointer items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 hover:border-primary transition-colors has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                                        <input className="sr-only" name="room_type" type="radio" value="shared" />
+                                        <input
+                                            className="sr-only"
+                                            name="room_type"
+                                            type="radio"
+                                            value="shared"
+                                            checked={roomType === 'shared'}
+                                            onChange={() => setRoomType('shared')}
+                                        />
                                         <span className="text-sm font-semibold">Shared Room</span>
                                     </label>
                                 </div>
@@ -127,10 +195,14 @@ export default function CompleteProfilePage() {
 
                     {/* Action Buttons */}
                     <div className="flex flex-col gap-3 p-4 mt-8">
-                        <Button variant="primary" size="lg" className="w-full rounded-xl" type="submit">
-                            Complete Profile
+                        <Button variant="primary" size="lg" className="w-full rounded-xl" type="submit" disabled={isLoading}>
+                            {isLoading ? 'Saving...' : 'Complete Profile'}
                         </Button>
-                        <button type="button" className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl h-12 px-5 bg-transparent text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal hover:bg-slate-100 dark:hover:bg-slate-800 transition-all">
+                        <button
+                            type="button"
+                            onClick={() => router.push('/')}
+                            className="flex w-full cursor-pointer items-center justify-center overflow-hidden rounded-xl h-12 px-5 bg-transparent text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                        >
                             <span className="truncate">I'll do this later</span>
                         </button>
                     </div>

@@ -46,7 +46,7 @@ export default function LoginPage() {
         if (result.data.role === 'landlord') {
           router.push('/landlord');
         } else if (result.data.role === 'student') {
-          router.push('/complete-profile');
+          router.push('/listings');
         } else {
           router.push('/');
         }

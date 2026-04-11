@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 
 import Header from "@/components/features/Header";
 import Footer from "@/components/features/Footer";
+import AuthHashHandler from "@/components/features/AuthHashHandler";
 
 export default function RootLayout({
   children,
@@ -31,6 +32,7 @@ export default function RootLayout({
         `}</style>
       </head>
       <body className={`${inter.variable} antialiased bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display`}>
+        <AuthHashHandler />
         <Header />
         <main>
           {children}
