@@ -16,6 +16,7 @@ import type {
   StudentProfileUpdateRequest,
   StudentRegisterRequest,
   TokenResponse,
+  UserProfileResponse,
 } from '@/lib/types/api.types';
 
 function afterAuthMutation() {
@@ -226,6 +227,22 @@ export async function updateStudentProfileAction(accessToken: string, body: Stud
   });
   if (result.data) afterProfileMutation();
   return result;
+}
+
+/**
+ * Fetch the authenticated user's profile.
+ *
+ * **Endpoint:** `GET /api/v1/auth/me` (bearer-protected)
+ *
+ * @param accessToken  JWT access token.
+ * @returns `ApiResult<UserProfileResponse>`.
+ */
+export async function getUserProfileAction(accessToken: string) {
+  return nestRequest<UserProfileResponse>('/api/v1/auth/me', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
 }
 
 /**
