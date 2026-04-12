@@ -103,6 +103,31 @@ export interface TokenResponse {
   role: UserRole;
 }
 
+export interface KycDocument {
+  id: string;
+  doc_type: string;
+  file_url: string;
+  uploaded_at: string;
+}
+
+export interface PendingKycUser {
+  user_id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  kyc_status: KYCStatus;
+  submitted_at: string;
+  documents: KycDocument[];
+}
+
+export interface KycUploadResponse {
+  doc_type: string;
+  message: string;
+  docs_uploaded: string[];
+  docs_still_required: string[];
+  ready_for_review: boolean;
+}
+
 export interface UserProfileResponse {
   id: string;
   full_name: string;

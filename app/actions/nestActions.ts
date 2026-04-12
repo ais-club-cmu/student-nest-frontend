@@ -2,10 +2,11 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache';
 
-import { nestRequest, NEST_API_BASE_URL } from '@/lib/api';
+import { nestRequest } from '@/lib/api';
 import type {
   ChangePasswordRequest,
   LandlordRegisterRequest,
+  PendingKycUser,
   LoginRequest,
   LogoutRequest,
   MessageResponse,
@@ -229,40 +230,6 @@ export async function updateStudentProfileAction(accessToken: string, body: Stud
   return result;
 }
 
-/**
- * Upload a KYC identity document for the authenticated landlord.
- *
- * **Endpoint:** `POST /api/v1/auth/me/kyc-document` (bearer-protected, multipart/form-data)
- *
- * @param accessToken  JWT access token.
- * @param formData     FormData containing the file under the key `"file"`.
- * @returns `ApiResult<MessageResponse>`.
- */
-export async function uploadKycDocumentAction(accessToken: string, formData: FormData) {
-  const url = `${NEST_API_BASE_URL}/api/v1/auth/me/kyc-document`;
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
-      // Do NOT set Content-Type — the browser sets it with the multipart boundary
-      body: formData,
-      cache: 'no-store',
-    });
-    const text = await res.text();
-    const payload = text.trim() ? JSON.parse(text) : null;
-    if (!res.ok) {
-      const message =
-        payload?.detail?.map((d: { msg: string }) => d.msg).join('; ') ??
-        payload?.message ??
-        res.statusText ??
-        'Upload failed';
-      return { data: null, error: { message, status: res.status } };
-    }
-    return { data: (payload ?? { message: 'Uploaded' }) as MessageResponse, error: null };
-  } catch (e) {
-    return { data: null, error: { message: e instanceof Error ? e.message : 'Network error' } };
-  }
-}
 
 /**
  * Fetch the authenticated user's profile.
@@ -323,4 +290,20 @@ export async function rejectLandlordKycAction(
   });
   if (result.data) afterAdminKycMutation();
   return result;
+}
+
+/**
+ * Fetch all landlords with pending KYC submissions (admin only).
+ *
+ * **Endpoint:** `GET /api/v1/auth/admin/kyc/pending` (bearer-protected)
+ *
+ * @param accessToken  Admin JWT access token.
+ * @returns `ApiResult<PendingKycUser[]>`.
+ */
+export async function getPendingKycAction(accessToken: string) {
+  return nestRequest<PendingKycUser[]>('/api/v1/auth/admin/kyc/pending', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
 }

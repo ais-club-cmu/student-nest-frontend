@@ -83,14 +83,14 @@ export default function LandlordPendingPage() {
 
                 {/* Action Buttons */}
                 <div className="flex flex-col gap-3">
-                    <Button
+                    {/* <Button
                         variant="primary"
                         size="lg"
                         className="w-full rounded-lg"
                         onClick={() => router.push('/landlord')}
                     >
                         Return to Dashboard
-                    </Button>
+                    </Button> */}
                     <Link href="/">
                         <Button variant="secondary" size="lg" className="w-full rounded-lg">
                             Back to Home
