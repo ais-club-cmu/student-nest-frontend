@@ -5,6 +5,7 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { nestRequest } from '@/lib/api';
 import type {
   ChangePasswordRequest,
+  LandlordKycDetail,
   LandlordRegisterRequest,
   PendingKycUser,
   LoginRequest,
@@ -302,6 +303,23 @@ export async function rejectLandlordKycAction(
  */
 export async function getPendingKycAction(accessToken: string) {
   return nestRequest<PendingKycUser[]>('/api/v1/auth/admin/kyc/pending', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
+}
+
+/**
+ * Fetch a single landlord's KYC details and documents (admin only).
+ *
+ * **Endpoint:** `GET /api/v1/auth/admin/kyc/{user_id}` (bearer-protected)
+ *
+ * @param accessToken  Admin JWT access token.
+ * @param userId       UUID of the landlord.
+ * @returns `ApiResult<PendingKycUser>`.
+ */
+export async function getLandlordKycAction(accessToken: string, userId: string) {
+  return nestRequest<LandlordKycDetail>(`/api/v1/auth/admin/kyc/${encodeURIComponent(userId)}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: 'no-store',

@@ -120,6 +120,23 @@ export interface PendingKycUser {
   documents: KycDocument[];
 }
 
+/** Actual response shape from GET /api/v1/auth/admin/kyc/{user_id} */
+export interface LandlordKycDetail {
+  user_id: string;
+  full_name: string;
+  landlord_email: string | null;
+  phone: string | null;
+  national_id: string;
+  address: string;
+  business_name: string | null;
+  kyc_status: KYCStatus;
+  docs_uploaded: string[];
+  /** Keys are doc type slugs (e.g. "national_id"), values are signed URL paths */
+  doc_signed_urls: Record<string, string>;
+  submitted_at: string;
+  docs_still_required: string[];
+}
+
 export interface KycUploadResponse {
   doc_type: string;
   message: string;
