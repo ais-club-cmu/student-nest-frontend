@@ -4,152 +4,274 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     getPendingKycAction,
+    getLandlordKycAction,
     approveLandlordKycAction,
     rejectLandlordKycAction,
 } from '@/app/actions/nestActions';
-import type { PendingKycUser } from '@/lib/types/api.types';
+import type { LandlordKycDetail, PendingKycUser } from '@/lib/types/api.types';
+
+const SUPABASE_STORAGE_BASE =
+    (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://rsroaeikcfuadqapeqqz.supabase.co') + '/storage/v1';
+
+function toAbsoluteUrl(url: string): string {
+    if (url.startsWith('http')) return url;
+    return `${SUPABASE_STORAGE_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+/** Maps the API's doc_signed_urls shape into a stable list for the UI */
+function docsFromDetail(detail: LandlordKycDetail) {
+    return Object.entries(detail.doc_signed_urls).map(([docType, signedPath]) => ({
+        id: docType,
+        doc_type: docType,
+        file_url: toAbsoluteUrl(signedPath),
+        uploaded_at: detail.submitted_at,
+    }));
+}
 
 type Tab = 'overview' | 'landlord-approvals' | 'student-verifications';
 
-// ── Reject modal ─────────────────────────────────────────────────────────────
-function RejectModal({
+// ── Review modal (fetches docs, approve / reject) ─────────────────────────────
+function ReviewModal({
     user,
     onClose,
-    onConfirm,
+    onApprove,
+    onReject,
+    busy,
 }: {
     user: PendingKycUser;
     onClose: () => void;
-    onConfirm: (reason: string) => void;
+    onApprove: () => void;
+    onReject: (reason: string) => void;
+    busy: boolean;
 }) {
+    type Doc = { id: string; doc_type: string; file_url: string; uploaded_at: string };
+    const [docs, setDocs] = useState<Doc[]>([]);
+    const [docsLoading, setDocsLoading] = useState(true);
+    const [docsError, setDocsError] = useState<string | null>(null);
+    const [activeDoc, setActiveDoc] = useState<Doc | null>(null);
+    const [rejectMode, setRejectMode] = useState(false);
     const [reason, setReason] = useState('');
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        getLandlordKycAction(token, user.user_id).then((result) => {
+            setDocsLoading(false);
+            if (result.error) { setDocsError(result.error.message); return; }
+            const d = result.data ? docsFromDetail(result.data) : [];
+            setDocs(d);
+            if (d.length > 0) setActiveDoc(d[0]);
+        });
+    }, [user.user_id]);
+
+    const initials = user.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+    const submitted = new Date(user.submitted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    const isImage = (url: string) => /\.(jpe?g|png|webp)(\?|$)/i.test(url);
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl w-full max-w-md p-6 flex flex-col gap-4">
-                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Reject KYC — {user.full_name}</h3>
-                <p className="text-sm text-slate-500">Provide a reason that will be sent to the landlord.</p>
-                <textarea
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 p-3 text-sm resize-none h-28 focus:ring-2 focus:ring-primary outline-none"
-                    placeholder="e.g. Document is blurry or expired..."
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                />
-                <div className="flex gap-3 justify-end">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                        Cancel
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+
+                {/* Modal header */}
+                <div className="flex items-center gap-4 px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+                    <div className="size-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm shrink-0">{initials}</div>
+                    <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 dark:text-white truncate">{user.full_name}</p>
+                        <p className="text-xs text-slate-500 truncate">{user.email} · Submitted {submitted}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 uppercase">Pending</span>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ml-2">
+                        <span className="material-symbols-outlined text-[20px]">close</span>
                     </button>
-                    <button
-                        onClick={() => reason.trim() && onConfirm(reason.trim())}
-                        disabled={!reason.trim()}
-                        className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
-                    >
-                        Reject
-                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto">
+                    {docsLoading && (
+                        <div className="flex items-center justify-center py-20">
+                            <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+                        </div>
+                    )}
+                    {docsError && (
+                        <div className="m-6 flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <span className="material-symbols-outlined text-red-500">error</span>
+                            <p className="text-sm text-red-700 dark:text-red-400">{docsError}</p>
+                        </div>
+                    )}
+                    {!docsLoading && !docsError && docs.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-20 gap-2 text-slate-400">
+                            <span className="material-symbols-outlined text-4xl">folder_off</span>
+                            <p className="text-sm font-medium">No documents uploaded yet.</p>
+                        </div>
+                    )}
+                    {!docsLoading && docs.length > 0 && (
+                        <div className="flex flex-col md:flex-row gap-0 h-full">
+                            {/* Doc list sidebar */}
+                            <div className="md:w-48 shrink-0 border-b md:border-b-0 md:border-r border-slate-100 dark:border-slate-800 p-4 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto">
+                                {docs.map((doc) => (
+                                    <button
+                                        key={doc.id}
+                                        onClick={() => setActiveDoc(doc)}
+                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-left text-xs font-semibold whitespace-nowrap md:whitespace-normal transition-colors ${
+                                            activeDoc?.id === doc.id
+                                                ? 'bg-primary/10 text-primary'
+                                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-[16px]">
+                                            {isImage(doc.file_url) ? 'image' : 'picture_as_pdf'}
+                                        </span>
+                                        {doc.doc_type.replace(/_/g, ' ')}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Doc preview */}
+                            {activeDoc && (
+                                <div className="flex-1 flex flex-col p-5 gap-4 min-h-[320px]">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                                            {activeDoc.doc_type.replace(/_/g, ' ')}
+                                        </p>
+                                        <a
+                                            href={activeDoc.file_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                                        >
+                                            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                                            Open full size
+                                        </a>
+                                    </div>
+                                    <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-hidden flex items-center justify-center min-h-[240px]">
+                                        {isImage(activeDoc.file_url) ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                                src={activeDoc.file_url}
+                                                alt={activeDoc.doc_type}
+                                                className="max-h-[420px] max-w-full object-contain"
+                                            />
+                                        ) : (
+                                            <div className="flex flex-col items-center gap-3 text-slate-400">
+                                                <span className="material-symbols-outlined text-6xl">picture_as_pdf</span>
+                                                <a
+                                                    href={activeDoc.file_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-sm font-semibold text-primary hover:underline"
+                                                >
+                                                    Click to open PDF
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">
+                                        Uploaded {new Date(activeDoc.uploaded_at).toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Reject reason input */}
+                    {rejectMode && (
+                        <div className="px-6 pb-4 flex flex-col gap-2">
+                            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Rejection reason <span className="text-red-500">*</span></label>
+                            <textarea
+                                autoFocus
+                                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 p-3 text-sm resize-none h-24 focus:ring-2 focus:ring-red-400 outline-none"
+                                placeholder="e.g. Document is blurry, expired, or does not match the registered name..."
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer actions */}
+                <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                    {!rejectMode ? (
+                        <>
+                            <button
+                                onClick={() => setRejectMode(true)}
+                                disabled={busy || docsLoading}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">cancel</span>
+                                Reject
+                            </button>
+                            <button
+                                onClick={onApprove}
+                                disabled={busy || docsLoading}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+                            >
+                                {busy
+                                    ? <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                                    : <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                                }
+                                {busy ? 'Approving…' : 'Approve'}
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button
+                                onClick={() => { setRejectMode(false); setReason(''); }}
+                                disabled={busy}
+                                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => reason.trim() && onReject(reason.trim())}
+                                disabled={!reason.trim() || busy}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
+                            >
+                                {busy
+                                    ? <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                                    : <span className="material-symbols-outlined text-[18px]">cancel</span>
+                                }
+                                {busy ? 'Rejecting…' : 'Confirm Rejection'}
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
     );
 }
 
-// ── KYC document viewer card ──────────────────────────────────────────────────
+// ── Pending KYC summary card ──────────────────────────────────────────────────
 function KycCard({
     user,
-    onApprove,
-    onReject,
-    busy,
+    onReview,
 }: {
     user: PendingKycUser;
-    onApprove: () => void;
-    onReject: () => void;
-    busy: boolean;
+    onReview: () => void;
 }) {
-    const [open, setOpen] = useState(false);
     const initials = user.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
-    const submitted = new Date(user.submitted_at).toLocaleDateString('en-US', {
-        year: 'numeric', month: 'short', day: 'numeric',
-    });
+    const submitted = new Date(user.submitted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 
     return (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            {/* Header row */}
-            <div className="flex items-center gap-4 p-5">
-                <div className="size-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm shrink-0">
-                    {initials}
-                </div>
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+            <div className="flex items-center gap-4 p-5 flex-1">
+                <div className="size-10 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm shrink-0">{initials}</div>
                 <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{user.full_name}</p>
                     <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                    {user.phone && <p className="text-xs text-slate-400 truncate">{user.phone}</p>}
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 uppercase tracking-wide">
-                        Pending
-                    </span>
-                    <span className="text-[10px] text-slate-400">Submitted {submitted}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 uppercase tracking-wide">Pending</span>
+                    <span className="text-[10px] text-slate-400">{submitted}</span>
                 </div>
             </div>
-
-            {/* Documents */}
-            {user.documents && user.documents.length > 0 && (
-                <div className="px-5 pb-3">
-                    <button
-                        onClick={() => setOpen((v) => !v)}
-                        className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-                    >
-                        <span className="material-symbols-outlined text-[16px]">
-                            {open ? 'expand_less' : 'expand_more'}
-                        </span>
-                        {open ? 'Hide' : 'View'} {user.documents.length} document{user.documents.length !== 1 ? 's' : ''}
-                    </button>
-                    {open && (
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {user.documents.map((doc) => (
-                                <div key={doc.id} className="flex flex-col gap-1">
-                                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{doc.doc_type.replace(/_/g, ' ')}</span>
-                                    <a
-                                        href={doc.file_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="group relative block rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 h-36"
-                                    >
-                                        {doc.file_url.match(/\.(jpe?g|png|webp)$/i) ? (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img src={doc.file_url} alt={doc.doc_type} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center h-full gap-2">
-                                                <span className="material-symbols-outlined text-4xl text-slate-400">picture_as_pdf</span>
-                                                <span className="text-xs text-slate-500">Click to open</span>
-                                            </div>
-                                        )}
-                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                                            <span className="material-symbols-outlined text-white opacity-0 group-hover:opacity-100 transition-opacity text-2xl">open_in_new</span>
-                                        </div>
-                                    </a>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex items-center gap-3 px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+            <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
                 <button
-                    onClick={onApprove}
-                    disabled={busy}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+                    onClick={onReview}
+                    className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold bg-primary hover:bg-primary/90 text-white transition-colors"
                 >
-                    <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                    Approve
-                </button>
-                <button
-                    onClick={onReject}
-                    disabled={busy}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
-                >
-                    <span className="material-symbols-outlined text-[18px]">cancel</span>
-                    Reject
+                    <span className="material-symbols-outlined text-[18px]">rate_review</span>
+                    Review Documents
                 </button>
             </div>
         </div>
@@ -164,7 +286,7 @@ export default function AdminDashboardPage() {
     const [kycLoading, setKycLoading] = useState(false);
     const [kycError, setKycError] = useState<string | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
-    const [rejectTarget, setRejectTarget] = useState<PendingKycUser | null>(null);
+    const [reviewTarget, setReviewTarget] = useState<PendingKycUser | null>(null);
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
     const showToast = (msg: string, ok: boolean) => {
@@ -208,7 +330,7 @@ export default function AdminDashboardPage() {
     const handleReject = async (user: PendingKycUser, reason: string) => {
         const token = getToken();
         if (!token) return;
-        setRejectTarget(null);
+        setReviewTarget(null);
         setBusyId(user.user_id);
         const result = await rejectLandlordKycAction(token, user.user_id, reason);
         setBusyId(null);
@@ -531,9 +653,7 @@ export default function AdminDashboardPage() {
                                         <KycCard
                                             key={user.user_id}
                                             user={user}
-                                            busy={busyId === user.user_id}
-                                            onApprove={() => handleApprove(user)}
-                                            onReject={() => setRejectTarget(user)}
+                                            onReview={() => setReviewTarget(user)}
                                         />
                                     ))}
                                 </div>
@@ -595,12 +715,14 @@ export default function AdminDashboardPage() {
                 </div>
             </main>
 
-            {/* Reject modal */}
-            {rejectTarget && (
-                <RejectModal
-                    user={rejectTarget}
-                    onClose={() => setRejectTarget(null)}
-                    onConfirm={(reason) => handleReject(rejectTarget, reason)}
+            {/* Review modal */}
+            {reviewTarget && (
+                <ReviewModal
+                    user={reviewTarget}
+                    busy={busyId === reviewTarget.user_id}
+                    onClose={() => setReviewTarget(null)}
+                    onApprove={() => handleApprove(reviewTarget)}
+                    onReject={(reason) => handleReject(reviewTarget, reason)}
                 />
             )}
 
