@@ -1,197 +1,295 @@
-import React from 'react';
-import Link from 'next/link';
+'use client';
 
-export default function AddListingStepTwoPage() {
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { updateDraftStep2Action } from '@/app/actions/listingsActions';
+import { handleAuthError } from '@/lib/auth-redirect';
+import type { UtilityType, LeaseDuration } from '@/lib/types/api.types';
+
+const UTILITIES: { value: UtilityType; label: string; icon: string }[] = [
+    { value: 'electricity', label: 'Electricity', icon: 'bolt' },
+    { value: 'water', label: 'Water', icon: 'water_drop' },
+    { value: 'gas', label: 'Gas', icon: 'local_fire_department' },
+    { value: 'security', label: 'Security', icon: 'security' },
+    { value: 'garbage', label: 'Garbage Collection', icon: 'delete' },
+];
+
+const LEASE_DURATIONS: { value: LeaseDuration; label: string }[] = [
+    { value: '1_month', label: '1 Month' },
+    { value: '3_months', label: '3 Months' },
+    { value: '6_months', label: '6 Months' },
+    { value: '12_months', label: '12 Months' },
+    { value: 'flexible', label: 'Flexible' },
+];
+
+export default function AddListingStep2Page() {
+    const router = useRouter();
+    const [listingId, setListingId] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [warning, setWarning] = useState<string | null>(null);
+    const [usdHint, setUsdHint] = useState<number | null>(null);
+    const [avgHint, setAvgHint] = useState<number | null>(null);
+    const [confirmAboveAvg, setConfirmAboveAvg] = useState(false);
+
+    const [monthlyRent, setMonthlyRent] = useState('');
+    const [securityDeposit, setSecurityDeposit] = useState('');
+    const [utilities, setUtilities] = useState<UtilityType[]>([]);
+    const [leaseDurations, setLeaseDurations] = useState<LeaseDuration[]>([]);
+
+    useEffect(() => {
+        const id = sessionStorage.getItem('currentDraftId');
+        if (!id) { router.replace('/landlord/listings/add'); return; }
+        setListingId(id);
+    }, [router]);
+
+    const toggleUtility = (v: UtilityType) =>
+        setUtilities((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
+
+    const toggleLease = (v: LeaseDuration) =>
+        setLeaseDurations((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!listingId || !monthlyRent) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) { router.push('/login'); return; }
+
+        setIsLoading(true);
+        setError(null);
+
+        const result = await updateDraftStep2Action(token, listingId, {
+            monthly_rent_rwf: Number(monthlyRent),
+            security_deposit_rwf: securityDeposit ? Number(securityDeposit) : null,
+            utilities: utilities.length > 0 ? utilities : null,
+            lease_durations: leaseDurations.length > 0 ? leaseDurations : null,
+            confirm_above_average: confirmAboveAvg,
+        });
+
+        setIsLoading(false);
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            setError(result.error.message);
+            return;
+        }
+
+        const d = result.data!;
+        if (d.usd_equivalent) setUsdHint(d.usd_equivalent);
+        if (d.neighborhood_average_rwf) setAvgHint(d.neighborhood_average_rwf);
+        if (d.warning) {
+            setWarning(d.warning);
+            return;
+        }
+        router.push('/landlord/listings/add/step-3');
+    };
+
+    const handleContinueWithWarning = async () => {
+        setConfirmAboveAvg(true);
+        setWarning(null);
+        await handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+    };
+
     return (
-        <div className="flex min-h-[calc(100vh-80px)] flex-col bg-background-light dark:bg-slate-950/50 font-display">
-            {/* Header Section */}
-            <header className="flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 md:px-40 py-4 sticky top-0 z-50">
+        <div className="flex min-h-screen flex-col bg-background-light dark:bg-slate-950/50">
+            <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 md:px-10 py-4 sticky top-0 z-50">
                 <div className="flex items-center gap-3">
-                    <div className="text-primary">
-                        <span className="material-symbols-outlined text-3xl">domain</span>
-                    </div>
-                    <h2 className="text-slate-900 dark:text-slate-100 text-xl font-bold leading-tight tracking-tight">StudentNest</h2>
+                    <span className="material-symbols-outlined text-primary text-2xl">home_work</span>
+                    <h2 className="text-slate-900 dark:text-white text-xl font-bold">StudentNest</h2>
                 </div>
-                <div className="flex items-center gap-4">
-                    <button className="hidden md:flex min-w-[100px] cursor-pointer items-center justify-center rounded-lg h-10 px-4 bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/20 transition-colors">
-                        Save Draft
-                    </button>
-                    <button className="flex size-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
-                        <span className="material-symbols-outlined text-slate-600 dark:text-slate-400">person</span>
-                    </button>
-                </div>
+                <button
+                    onClick={() => { sessionStorage.removeItem('currentDraftId'); router.push('/landlord/listings'); }}
+                    className="flex items-center gap-1.5 px-4 h-10 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                    Cancel
+                </button>
             </header>
 
             <main className="flex flex-1 justify-center py-8 px-4 md:px-0">
-                <div className="flex flex-col max-w-[800px] flex-1">
-                    {/* Form Container */}
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 mb-6">
-
-                        {/* Progress Section */}
-                        <div className="flex flex-col gap-4 mb-8">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Amenities &amp; Details</h1>
-                                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Step 2 of 5: Property specifics</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-primary text-lg font-bold">40%</p>
-                                    <p className="text-slate-400 text-xs uppercase tracking-wider">Complete</p>
-                                </div>
+                <div className="flex flex-col w-full max-w-[720px]">
+                    {/* Progress */}
+                    <div className="flex flex-col gap-3 mb-8">
+                        <div className="flex items-end justify-between">
+                            <div>
+                                <h1 className="text-slate-900 dark:text-white text-2xl font-bold">Pricing &amp; Utilities</h1>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Step 2 of 5 — Set your rent and what&apos;s included</p>
                             </div>
-                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
-                                <div className="bg-primary h-2.5 rounded-full transition-all duration-500" style={{ width: '40%' }}></div>
+                            <div className="text-right">
+                                <p className="text-primary text-sm font-bold">40%</p>
+                                <p className="text-slate-400 text-xs uppercase tracking-wider">Complete</p>
                             </div>
                         </div>
-
-                        {/* Main Form */}
-                        <form className="space-y-10">
-                            {/* Bills Included */}
-                            <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <span className="material-symbols-outlined text-primary">receipt_long</span>
-                                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Bills Included</h3>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <label className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <span className="text-slate-700 dark:text-slate-300 font-medium">Electricity</span>
-                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="bills_electricity" />
-                                    </label>
-                                    <label className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <span className="text-slate-700 dark:text-slate-300 font-medium">Internet (High-speed)</span>
-                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="bills_internet" />
-                                    </label>
-                                    <label className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <span className="text-slate-700 dark:text-slate-300 font-medium">Gas</span>
-                                        <input className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="bills_gas" />
-                                    </label>
-                                    <label className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <span className="text-slate-700 dark:text-slate-300 font-medium">Water &amp; Sewage</span>
-                                        <input className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="bills_water" />
-                                    </label>
-                                    <label className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <span className="text-slate-700 dark:text-slate-300 font-medium">Security/Maintenance</span>
-                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="bills_security" />
-                                    </label>
-                                </div>
-                            </section>
-
-                            {/* Features & Appliances */}
-                            <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <span className="material-symbols-outlined text-primary">countertops</span>
-                                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Features &amp; Appliances</h3>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                    <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <input className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="feature_microwave" />
-                                        <span className="text-slate-700 dark:text-slate-300">Microwave</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="feature_washingmachine" />
-                                        <span className="text-slate-700 dark:text-slate-300">Washing Machine</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="feature_waterheater" />
-                                        <span className="text-slate-700 dark:text-slate-300">Water Heater</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <input className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="feature_ac" />
-                                        <span className="text-slate-700 dark:text-slate-300">Air Conditioning</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <input defaultChecked className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="feature_fridge" />
-                                        <span className="text-slate-700 dark:text-slate-300">Fridge</span>
-                                    </label>
-                                    <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
-                                        <input className="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary" type="checkbox" name="feature_stove" />
-                                        <span className="text-slate-700 dark:text-slate-300">Kitchen Stove</span>
-                                    </label>
-                                </div>
-                            </section>
-
-                            {/* Furnishing Status */}
-                            <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <span className="material-symbols-outlined text-primary">chair</span>
-                                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Furnishing Status</h3>
-                                </div>
-                                <div className="grid grid-cols-3 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl max-w-md">
-                                    <label className="cursor-pointer">
-                                        <input className="sr-only peer" name="furnishing" type="radio" value="unfurnished" />
-                                        <div className="text-center py-2.5 rounded-lg text-sm font-semibold text-slate-500 peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-primary peer-checked:shadow-sm transition-all">
-                                            Unfurnished
-                                        </div>
-                                    </label>
-                                    <label className="cursor-pointer">
-                                        <input defaultChecked className="sr-only peer" name="furnishing" type="radio" value="semi-furnished" />
-                                        <div className="text-center py-2.5 rounded-lg text-sm font-semibold text-slate-500 peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-primary peer-checked:shadow-sm transition-all">
-                                            Semi
-                                        </div>
-                                    </label>
-                                    <label className="cursor-pointer">
-                                        <input className="sr-only peer" name="furnishing" type="radio" value="furnished" />
-                                        <div className="text-center py-2.5 rounded-lg text-sm font-semibold text-slate-500 peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-primary peer-checked:shadow-sm transition-all">
-                                            Furnished
-                                        </div>
-                                    </label>
-                                </div>
-                            </section>
-
-                            {/* Important Notes */}
-                            <section>
-                                <div className="flex items-center gap-2 mb-4">
-                                    <span className="material-symbols-outlined text-primary">info</span>
-                                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Important Notes</h3>
-                                </div>
-                                <textarea
-                                    className="w-full rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary focus:ring-primary resize-y"
-                                    placeholder="Add any additional details, house rules, or specific terms..."
-                                    rows={4}
-                                    name="important_notes"
-                                ></textarea>
-                                <p className="text-xs text-slate-400 mt-2 italic">Visible to potential tenants on the listing details page.</p>
-                            </section>
-                        </form>
+                        <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                            <div className="h-full bg-primary transition-all duration-500" style={{ width: '40%' }} />
+                        </div>
+                        <div className="flex gap-6 text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                            {['Identity', 'Pricing', 'Photos', 'Calendar', 'Rules'].map((s, i) => (
+                                <span key={s} className={i === 1 ? 'text-primary' : ''}>{i + 1}. {s}</span>
+                            ))}
+                        </div>
                     </div>
 
-                    {/* Action Footer */}
-                    <div className="flex items-center justify-between mt-4">
-                        <Link href="/landlord/listings/add" className="flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                    <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8 space-y-8">
+
+                        {error && (
+                            <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                <span className="material-symbols-outlined text-red-500">error</span>
+                                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+                            </div>
+                        )}
+
+                        {warning && (
+                            <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                <div className="flex items-start gap-3">
+                                    <span className="material-symbols-outlined text-amber-500 mt-0.5">warning</span>
+                                    <p className="text-sm text-amber-700 dark:text-amber-400">{warning}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleContinueWithWarning}
+                                    disabled={isLoading}
+                                    className="self-end px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50"
+                                >
+                                    Continue Anyway
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Rent */}
+                        <section>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="material-symbols-outlined text-primary">payments</span>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Monthly Rent</h3>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                        Rent (RWF) <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-semibold pointer-events-none">RWF</span>
+                                        <input
+                                            required
+                                            type="number"
+                                            min="0"
+                                            value={monthlyRent}
+                                            onChange={(e) => setMonthlyRent(e.target.value)}
+                                            placeholder="e.g. 350000"
+                                            className="w-full pl-12 pr-4 h-12 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary text-sm transition-all outline-none"
+                                        />
+                                    </div>
+                                    {usdHint && (
+                                        <p className="text-xs text-slate-500">≈ ${usdHint.toFixed(2)} USD at current rate</p>
+                                    )}
+                                </div>
+
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Security Deposit (RWF)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-semibold pointer-events-none">RWF</span>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            value={securityDeposit}
+                                            onChange={(e) => setSecurityDeposit(e.target.value)}
+                                            placeholder="Optional"
+                                            className="w-full pl-12 pr-4 h-12 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary text-sm transition-all outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            {avgHint && (
+                                <p className="mt-2 text-xs text-slate-500">
+                                    Neighbourhood average: <span className="font-semibold">RWF {avgHint.toLocaleString()}</span>
+                                </p>
+                            )}
+                        </section>
+
+                        {/* Utilities */}
+                        <section>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="material-symbols-outlined text-primary">receipt_long</span>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Utilities Included</h3>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {UTILITIES.map((u) => {
+                                    const checked = utilities.includes(u.value);
+                                    return (
+                                        <label
+                                            key={u.value}
+                                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                                checked
+                                                    ? 'border-primary bg-primary/5 text-primary'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only"
+                                                checked={checked}
+                                                onChange={() => toggleUtility(u.value)}
+                                            />
+                                            <span className="material-symbols-outlined text-[18px]">{u.icon}</span>
+                                            <span className="text-sm font-medium">{u.label}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
+                        {/* Lease Durations */}
+                        <section>
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className="material-symbols-outlined text-primary">event_note</span>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Lease Durations Offered</h3>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                                {LEASE_DURATIONS.map((l) => {
+                                    const checked = leaseDurations.includes(l.value);
+                                    return (
+                                        <label
+                                            key={l.value}
+                                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border cursor-pointer font-semibold text-sm transition-all ${
+                                                checked
+                                                    ? 'border-primary bg-primary text-white shadow-sm'
+                                                    : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-primary/50'
+                                            }`}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only"
+                                                checked={checked}
+                                                onChange={() => toggleLease(l.value)}
+                                            />
+                                            {l.label}
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </section>
+                    </form>
+
+                    {/* Navigation */}
+                    <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                        <button
+                            type="button"
+                            onClick={() => router.push('/landlord/listings/add')}
+                            className="flex items-center gap-2 px-6 h-12 rounded-lg text-slate-500 dark:text-slate-400 font-semibold hover:text-slate-900 dark:hover:text-white transition-colors"
+                        >
                             <span className="material-symbols-outlined">arrow_back</span>
                             Back
-                        </Link>
-                        <div className="flex gap-4">
-                            <button className="hidden sm:flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-                                Cancel
-                            </button>
-                            <button className="flex items-center gap-2 px-10 py-3 rounded-lg font-bold bg-primary text-white hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20">
-                                Next Step
-                                <span className="material-symbols-outlined">arrow_forward</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Step Indicator */}
-                    <div className="mt-12 mb-8 text-center border-t border-slate-200 dark:border-slate-800 pt-8">
-                        <div className="flex justify-center flex-wrap gap-4 sm:gap-8 text-slate-400 text-xs font-semibold uppercase tracking-widest">
-                            <div className="flex items-center gap-2">
-                                <span className="size-6 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-[10px]">1</span>
-                                Location
-                            </div>
-                            <div className="flex items-center gap-2 text-primary">
-                                <span className="size-6 rounded-full border-2 border-primary flex items-center justify-center text-[10px]">2</span>
-                                Amenities
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="size-6 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-[10px]">3</span>
-                                Media
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="size-6 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center text-[10px]">4</span>
-                                Pricing
-                            </div>
-                        </div>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={(e) => handleSubmit(e as unknown as React.FormEvent)}
+                            disabled={isLoading || !monthlyRent}
+                            className="flex items-center gap-2 px-8 h-12 rounded-lg bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? (
+                                <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                            ) : (
+                                <>Next Step <span className="material-symbols-outlined">arrow_forward</span></>
+                            )}
+                        </button>
                     </div>
                 </div>
             </main>

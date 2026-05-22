@@ -63,14 +63,13 @@ async function parseJson<T>(res: Response): Promise<T | null> {
 }
 
 function messageFromPayload(payload: unknown, fallback: string): string {
-  if (
-    payload &&
-    typeof payload === 'object' &&
-    'detail' in payload &&
-    Array.isArray((payload as HTTPValidationError).detail)
-  ) {
-    const msgs = (payload as HTTPValidationError).detail.map((d) => d.msg).filter(Boolean);
-    if (msgs.length) return msgs.join('; ');
+  if (payload && typeof payload === 'object' && 'detail' in payload) {
+    const detail = (payload as { detail: unknown }).detail;
+    if (typeof detail === 'string' && detail.length) return detail;
+    if (Array.isArray(detail)) {
+      const msgs = (detail as HTTPValidationError['detail']).map((d) => d.msg).filter(Boolean);
+      if (msgs.length) return msgs.join('; ');
+    }
   }
   if (payload && typeof payload === 'object' && 'message' in payload) {
     const m = (payload as MessageResponse).message;
@@ -137,16 +136,9 @@ export async function nestRequest<TResponse>(
       };
     }
 
-    // If response is OK but payload is null/empty, return error
+    // 204 No Content or empty body on a successful response — treat as success
     if (!payload) {
-      console.error('[nestRequest] Empty response body received');
-      return {
-        data: null,
-        error: {
-          message: 'Empty response from server',
-          status: res.status,
-        },
-      };
+      return { data: null as unknown as TResponse, error: null };
     }
 
     return { data: payload as TResponse, error: null };

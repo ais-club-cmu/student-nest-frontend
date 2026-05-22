@@ -6,9 +6,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { logoutAction } from '@/app/actions/nestActions';
 
-const NAV_LINKS = [
+const STATIC_NAV_LINKS = [
     { label: 'Browse Listings', href: '/listings' },
-    { label: 'For Landlords', href: '/landlord-registration' },
     { label: 'About Us', href: '#' },
     { label: 'Partners', href: '#' },
 ];
@@ -89,7 +88,7 @@ export default function Header() {
 
                         {/* Desktop nav */}
                         <nav className="hidden md:flex items-center gap-8">
-                            {NAV_LINKS.map((link) => (
+                            {STATIC_NAV_LINKS.map((link) => (
                                 <Link
                                     key={link.label}
                                     href={link.href}
@@ -98,6 +97,12 @@ export default function Header() {
                                     {link.label}
                                 </Link>
                             ))}
+                            <Link
+                                href={userRole === 'landlord' ? '/landlord/listings' : '/landlord-registration'}
+                                className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors"
+                            >
+                                For Landlords
+                            </Link>
                         </nav>
 
                         {/* Right side */}
@@ -195,7 +200,7 @@ export default function Header() {
 
                 {/* Nav links */}
                 <nav className="flex-1 px-4 py-6 flex flex-col gap-1 overflow-y-auto">
-                    {NAV_LINKS.map((link) => (
+                    {STATIC_NAV_LINKS.map((link) => (
                         <Link
                             key={link.label}
                             href={link.href}
@@ -205,6 +210,13 @@ export default function Header() {
                             {link.label}
                         </Link>
                     ))}
+                    <Link
+                        href={userRole === 'landlord' ? '/landlord/listings' : '/landlord-registration'}
+                        onClick={() => setDrawerOpen(false)}
+                        className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                        For Landlords
+                    </Link>
 
                     {isLoggedIn && (
                         <>

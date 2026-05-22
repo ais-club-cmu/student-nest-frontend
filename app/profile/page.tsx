@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getUserProfileAction } from '@/app/actions/nestActions';
+import { handleAuthError } from '@/lib/auth-redirect';
 import type { UserProfileResponse } from '@/lib/types/api.types';
 
 function DetailRow({ label, value }: { label: string; value: string | boolean | null | undefined }) {
@@ -34,6 +35,7 @@ export default function ProfilePage() {
 
         getUserProfileAction(accessToken).then((result) => {
             if (result.error) {
+                if (handleAuthError(result.error, router)) return;
                 setError(result.error.message);
             } else {
                 setProfile(result.data);

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { handleAuthError } from '@/lib/auth-redirect';
 import { Button } from '@/components/ui/Button';
 import type { KycUploadResponse } from '@/lib/types/api.types';
 
@@ -118,7 +119,7 @@ export default function LandlordIDVerificationPage() {
 
         const accessToken = localStorage.getItem('accessToken');
         if (!accessToken) {
-            setUploadError('You must be logged in. Please sign in and try again.');
+            router.push('/login');
             return;
         }
 
@@ -129,6 +130,10 @@ export default function LandlordIDVerificationPage() {
         setIsLoading(false);
 
         if (result.error) {
+            if (result.error === 'Unauthorized' || result.error.toLowerCase().includes('authentication')) {
+                router.push('/login');
+                return;
+            }
             setUploadError(result.error);
             return;
         }

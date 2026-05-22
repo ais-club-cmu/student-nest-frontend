@@ -1,163 +1,283 @@
-import React from 'react';
-import Link from 'next/link';
+'use client';
 
-export default function AddListingStepOnePage() {
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createDraftAction, updateDraftStep1Action, getNeighborhoodsAction } from '@/app/actions/listingsActions';
+import { handleAuthError } from '@/lib/auth-redirect';
+import type { NeighborhoodResponse, PropertyType, FloorLevel } from '@/lib/types/api.types';
+
+const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
+    { value: 'single_room', label: 'Single Room' },
+    { value: 'shared_room', label: 'Shared Room' },
+    { value: 'self_contained_studio', label: 'Self-Contained Studio' },
+    { value: 'full_apartment', label: 'Full Apartment' },
+];
+
+const FLOOR_LEVELS: { value: FloorLevel; label: string }[] = [
+    { value: 'ground', label: 'Ground Floor' },
+    { value: 'first', label: '1st Floor' },
+    { value: 'second', label: '2nd Floor' },
+    { value: 'third', label: '3rd Floor' },
+    { value: 'fourth_plus', label: '4th Floor or Higher' },
+];
+
+export default function AddListingStep1Page() {
+    const router = useRouter();
+    const [listingId, setListingId] = useState<string | null>(null);
+    const [neighborhoods, setNeighborhoods] = useState<NeighborhoodResponse[]>([]);
+    const [initializing, setInitializing] = useState(true);
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [warning, setWarning] = useState<string | null>(null);
+
+    const [fullAddress, setFullAddress] = useState('');
+    const [neighborhoodId, setNeighborhoodId] = useState('');
+    const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
+    const [floorLevel, setFloorLevel] = useState<FloorLevel | ''>('');
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        const role = localStorage.getItem('userRole');
+        if (!token || (role !== 'landlord' && role !== 'student')) {
+            router.push('/login');
+            return;
+        }
+
+        async function init() {
+            const existing = sessionStorage.getItem('currentDraftId');
+
+            const [neighborhoodsResult] = await Promise.all([
+                getNeighborhoodsAction(),
+            ]);
+            if (neighborhoodsResult.data) setNeighborhoods(neighborhoodsResult.data);
+
+            if (existing) {
+                setListingId(existing);
+            } else {
+                const draftResult = await createDraftAction(token!);
+                if (draftResult.error) {
+                    if (handleAuthError(draftResult.error, router)) return;
+                    setError(draftResult.error.message);
+                    setInitializing(false);
+                    return;
+                }
+                const newId = draftResult.data!.id;
+                sessionStorage.setItem('currentDraftId', newId);
+                setListingId(newId);
+            }
+            setInitializing(false);
+        }
+
+        init();
+    }, [router]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!listingId || !fullAddress || !neighborhoodId || !propertyType || !floorLevel) return;
+        const token = localStorage.getItem('accessToken');
+        if (!token) { router.push('/login'); return; }
+
+        setIsLoading(true);
+        setError(null);
+        setWarning(null);
+
+        const result = await updateDraftStep1Action(token, listingId, {
+            full_address: fullAddress,
+            neighborhood_id: neighborhoodId,
+            property_type: propertyType as PropertyType,
+            floor_level: floorLevel as FloorLevel,
+        });
+
+        setIsLoading(false);
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            setError(result.error.message);
+            return;
+        }
+        if (result.data?.warning) setWarning(result.data.warning);
+        router.push('/landlord/listings/add/step-2');
+    };
+
+    const handleCancel = () => {
+        sessionStorage.removeItem('currentDraftId');
+        router.push('/landlord/listings');
+    };
+
+    if (initializing) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-background-light dark:bg-slate-950/50">
+                <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+            </div>
+        );
+    }
+
     return (
-        <div className="flex min-h-[calc(100vh-80px)] flex-col">
-            {/* Header Section */}
-            <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 md:px-10 py-4">
+        <div className="flex min-h-screen flex-col bg-background-light dark:bg-slate-950/50">
+            <header className="flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 md:px-10 py-4 sticky top-0 z-50">
                 <div className="flex items-center gap-3">
-                    <div className="size-8 text-primary">
-                        <svg fill="currentColor" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M44 11.2727C44 14.0109 39.8386 16.3957 33.69 17.6364C39.8386 18.877 44 21.2618 44 24C44 26.7382 39.8386 29.123 33.69 30.3636C39.8386 31.6043 44 33.9891 44 36.7273C44 40.7439 35.0457 44 24 44C12.9543 44 4 40.7439 4 36.7273C4 33.9891 8.16144 31.6043 14.31 30.3636C8.16144 29.123 4 26.7382 4 24C4 21.2618 8.16144 18.877 14.31 17.6364C8.16144 16.3957 4 14.0109 4 11.2727C4 7.25611 12.9543 4 24 4C35.0457 4 44 7.25611 44 11.2727Z"></path>
-                        </svg>
-                    </div>
-                    <h2 className="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-tight">StudentNest</h2>
+                    <span className="material-symbols-outlined text-primary text-2xl">home_work</span>
+                    <h2 className="text-slate-900 dark:text-white text-xl font-bold">StudentNest</h2>
                 </div>
-                <div className="flex items-center gap-4">
-                    <button className="flex min-w-[84px] cursor-pointer items-center justify-center rounded-lg h-10 px-4 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-bold transition-colors hover:bg-slate-50 dark:hover:bg-slate-800">
-                        Cancel
-                    </button>
-                </div>
+                <button
+                    onClick={handleCancel}
+                    className="flex items-center gap-1.5 px-4 h-10 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                >
+                    Cancel
+                </button>
             </header>
 
             <main className="flex flex-1 justify-center py-8 px-4 md:px-0">
-                <div className="flex flex-col max-w-[720px] flex-1">
-                    {/* Progress Bar Component */}
+                <div className="flex flex-col w-full max-w-[720px]">
+                    {/* Progress */}
                     <div className="flex flex-col gap-3 mb-8">
-                        <div className="flex gap-6 justify-between items-end">
+                        <div className="flex items-end justify-between">
                             <div>
-                                <h1 className="text-slate-900 dark:text-white text-3xl font-bold leading-tight">Add New Listing</h1>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Property Basics</p>
+                                <h1 className="text-slate-900 dark:text-white text-2xl font-bold">Add New Listing</h1>
+                                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Step 1 of 5 — Property Identity</p>
                             </div>
                             <div className="text-right">
-                                <p className="text-slate-900 dark:text-white text-sm font-semibold">Step 1 of 4</p>
-                                <p className="text-primary text-xs font-medium uppercase tracking-wider">25% Complete</p>
+                                <p className="text-primary text-sm font-bold">20%</p>
+                                <p className="text-slate-400 text-xs uppercase tracking-wider">Complete</p>
                             </div>
                         </div>
                         <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                            <div className="h-full bg-primary" style={{ width: '25%' }}></div>
+                            <div className="h-full bg-primary transition-all duration-500" style={{ width: '20%' }} />
+                        </div>
+                        <div className="flex gap-6 text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                            {['Identity', 'Pricing', 'Photos', 'Calendar', 'Rules'].map((s, i) => (
+                                <span key={s} className={i === 0 ? 'text-primary' : ''}>{i + 1}. {s}</span>
+                            ))}
                         </div>
                     </div>
 
-                    {/* Form Content */}
-                    <div className="space-y-6 bg-white dark:bg-slate-900 p-6 md:p-8 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
-                        {/* Property Title */}
+                    {/* Form card */}
+                    <form id="step1-form" onSubmit={handleSubmit} className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 md:p-8 space-y-6">
+
+                        {error && (
+                            <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                <span className="material-symbols-outlined text-red-500">error</span>
+                                <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+                            </div>
+                        )}
+                        {warning && (
+                            <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                <span className="material-symbols-outlined text-amber-500">warning</span>
+                                <p className="text-sm text-amber-700 dark:text-amber-400">{warning}</p>
+                            </div>
+                        )}
+
+                        {/* Full Address */}
                         <div className="flex flex-col gap-2">
-                            <label className="text-slate-900 dark:text-slate-100 text-base font-semibold">Property Title</label>
-                            <input
-                                className="flex w-full rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base transition-all"
-                                placeholder="e.g. Modern Studio near University Gate 2"
-                                type="text"
-                            />
-                            <p className="text-slate-500 text-xs">Use a clear, descriptive title to attract students.</p>
+                            <label className="text-slate-900 dark:text-slate-100 text-sm font-semibold">
+                                Full Address <span className="text-red-500">*</span>
+                            </label>
+                            <div className="relative">
+                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">location_on</span>
+                                <input
+                                    required
+                                    type="text"
+                                    value={fullAddress}
+                                    onChange={(e) => setFullAddress(e.target.value)}
+                                    placeholder="e.g. KG 15 Ave, Kacyiru, Kigali"
+                                    className="w-full pl-10 pr-4 h-12 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary text-sm transition-all outline-none"
+                                />
+                            </div>
+                            <p className="text-slate-400 text-xs">Include street, district, and city.</p>
                         </div>
 
-                        {/* Category */}
+                        {/* Neighborhood */}
                         <div className="flex flex-col gap-2">
-                            <label className="text-slate-900 dark:text-slate-100 text-base font-semibold">Category</label>
+                            <label className="text-slate-900 dark:text-slate-100 text-sm font-semibold">
+                                Neighbourhood <span className="text-red-500">*</span>
+                            </label>
                             <div className="relative">
-                                <select defaultValue="" className="flex w-full appearance-none rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-12 px-4 text-base">
-                                    <option disabled value="">Select property type</option>
-                                    <option value="apartment">Apartment</option>
-                                    <option value="studio">Studio</option>
-                                    <option value="private-room">Private Room</option>
-                                    <option value="shared-room">Shared Room</option>
-                                    <option value="dorm">Dormitory</option>
+                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">map</span>
+                                <select
+                                    required
+                                    value={neighborhoodId}
+                                    onChange={(e) => setNeighborhoodId(e.target.value)}
+                                    className="w-full pl-10 pr-4 h-12 appearance-none rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary text-sm transition-all outline-none"
+                                >
+                                    <option value="">Select neighbourhood</option>
+                                    {neighborhoods.map((n) => (
+                                        <option key={n.id} value={n.id}>{n.name}</option>
+                                    ))}
                                 </select>
                             </div>
                         </div>
 
-                        {/* Location */}
-                        <div className="flex flex-col gap-2">
-                            <label className="text-slate-900 dark:text-slate-100 text-base font-semibold">Location</label>
-                            <div className="relative group">
-                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary">location_on</span>
-                                <input
-                                    className="flex w-full pl-10 pr-4 rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-12 text-base"
-                                    placeholder="Enter property address or city"
-                                    type="text"
-                                />
-                            </div>
-
-                            {/* Placeholder Map Picker */}
-                            <div className="mt-3 relative w-full h-48 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
-                                <img
-                                    className="w-full h-full object-cover opacity-80"
-                                    data-alt="Interactive map for location selection"
-                                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2XHcuhK6-p2g_GNJunV9JXJh1JV3qxAb2ixmlZvC5BumyFLwDQDLfp3Imn9L23LMCqyIzmu09fVabUWA0I_8d4wtK1Xxg17VIDx2EGHiOn9vnWO_fdXDoKGRGtzmS6r3DtJU_hsHOiHLvTHl6tv_IHh4fTGDoNjavS30O0dtwqiTd9WCFLxoVdIDUlhdOKYjpLHiN9w-QFtlhP-pnjYzjwff5ZFyRmcukV6gNYFdRG4kTruCnH-SEd0aSgBqM3WMzNvbQK1yGJM1T"
-                                    alt="Map Location Placeholder"
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="bg-white dark:bg-slate-900 p-2 rounded-full shadow-lg border border-primary/20">
-                                        <span className="material-symbols-outlined text-primary text-3xl">location_on</span>
-                                    </div>
-                                </div>
-                                <div className="absolute bottom-2 right-2">
-                                    <button className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded text-xs font-bold text-slate-700 dark:text-slate-300 shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-                                        <span className="material-symbols-outlined text-sm">fullscreen</span>
-                                        Full Map
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Rooms Info */}
+                        {/* Property Type + Floor Level */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="flex flex-col gap-2">
-                                <label className="text-slate-900 dark:text-slate-100 text-base font-semibold">Total Rooms</label>
-                                <div className="relative flex items-center">
-                                    <button type="button" className="absolute left-2 size-8 flex items-center justify-center text-slate-400 hover:text-primary z-10">
-                                        <span className="material-symbols-outlined">remove</span>
-                                    </button>
-                                    <input
-                                        className="flex w-full text-center rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-12 text-base"
-                                        type="number"
-                                        defaultValue="1"
-                                    />
-                                    <button type="button" className="absolute right-2 size-8 flex items-center justify-center text-slate-400 hover:text-primary z-10">
-                                        <span className="material-symbols-outlined">add</span>
-                                    </button>
+                                <label className="text-slate-900 dark:text-slate-100 text-sm font-semibold">
+                                    Property Type <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">apartment</span>
+                                    <select
+                                        required
+                                        value={propertyType}
+                                        onChange={(e) => setPropertyType(e.target.value as PropertyType)}
+                                        className="w-full pl-10 pr-4 h-12 appearance-none rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary text-sm transition-all outline-none"
+                                    >
+                                        <option value="">Select type</option>
+                                        {PROPERTY_TYPES.map((t) => (
+                                            <option key={t.value} value={t.value}>{t.label}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <p className="text-slate-500 text-xs">Total bedrooms in the entire property.</p>
                             </div>
 
                             <div className="flex flex-col gap-2">
-                                <label className="text-slate-900 dark:text-slate-100 text-base font-semibold">Available for Rent</label>
-                                <div className="relative flex items-center">
-                                    <button type="button" className="absolute left-2 size-8 flex items-center justify-center text-slate-400 hover:text-primary z-10">
-                                        <span className="material-symbols-outlined">remove</span>
-                                    </button>
-                                    <input
-                                        className="flex w-full text-center rounded-lg text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 focus:border-primary focus:ring-1 focus:ring-primary h-12 text-base"
-                                        type="number"
-                                        defaultValue="1"
-                                    />
-                                    <button type="button" className="absolute right-2 size-8 flex items-center justify-center text-slate-400 hover:text-primary z-10">
-                                        <span className="material-symbols-outlined">add</span>
-                                    </button>
+                                <label className="text-slate-900 dark:text-slate-100 text-sm font-semibold">
+                                    Floor Level <span className="text-red-500">*</span>
+                                </label>
+                                <div className="relative">
+                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">stairs</span>
+                                    <select
+                                        required
+                                        value={floorLevel}
+                                        onChange={(e) => setFloorLevel(e.target.value as FloorLevel)}
+                                        className="w-full pl-10 pr-4 h-12 appearance-none rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary text-sm transition-all outline-none"
+                                    >
+                                        <option value="">Select floor</option>
+                                        {FLOOR_LEVELS.map((f) => (
+                                            <option key={f.value} value={f.value}>{f.label}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                                <p className="text-slate-500 text-xs">Number of rooms you want to list now.</p>
                             </div>
                         </div>
-                    </div>
+                    </form>
 
-                    {/* Navigation Footer */}
-                    <div className="flex items-center justify-between mt-10 pt-6 border-t border-slate-200 dark:border-slate-800">
-                        <button className="flex items-center gap-2 px-6 h-12 rounded-lg text-slate-500 dark:text-slate-400 font-bold hover:text-slate-900 dark:hover:text-white transition-colors">
+                    {/* Navigation */}
+                    <div className="flex items-center justify-between mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+                        <button
+                            type="button"
+                            onClick={handleCancel}
+                            className="flex items-center gap-2 px-6 h-12 rounded-lg text-slate-500 dark:text-slate-400 font-semibold hover:text-slate-900 dark:hover:text-white transition-colors"
+                        >
                             <span className="material-symbols-outlined">arrow_back</span>
                             Back
                         </button>
-                        <button className="flex items-center justify-center min-w-[140px] px-8 h-12 rounded-lg bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all">
-                            Next Step
+                        <button
+                            form="step1-form"
+                            type="submit"
+                            disabled={isLoading || !fullAddress || !neighborhoodId || !propertyType || !floorLevel}
+                            className="flex items-center gap-2 px-8 h-12 rounded-lg bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? (
+                                <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+                            ) : (
+                                <>Next Step <span className="material-symbols-outlined">arrow_forward</span></>
+                            )}
                         </button>
                     </div>
                 </div>
             </main>
 
-            {/* Small Footer */}
-            <footer className="py-6 px-10 text-center">
-                <p className="text-slate-400 text-xs">© 2024 StudentNest Housing Solutions. Secure &amp; Verified Listings.</p>
+            <footer className="py-6 text-center">
+                <p className="text-slate-400 text-xs">© 2025 StudentNest Housing Solutions. Secure &amp; Verified Listings.</p>
             </footer>
         </div>
     );

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { updateStudentProfileAction } from '@/app/actions/nestActions';
+import { handleAuthError } from '@/lib/auth-redirect';
 
 export default function CompleteProfilePage() {
     const router = useRouter();
@@ -18,8 +19,7 @@ export default function CompleteProfilePage() {
 
         const accessToken = localStorage.getItem('accessToken');
         if (!accessToken) {
-            setError('You must be logged in to complete your profile.');
-            setIsLoading(false);
+            router.push('/login');
             return;
         }
 

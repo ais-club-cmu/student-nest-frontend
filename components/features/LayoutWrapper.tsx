@@ -1,0 +1,24 @@
+'use client';
+
+import { usePathname } from 'next/navigation';
+import Header from './Header';
+import Footer from './Footer';
+
+const CHROME_FREE_ROUTES = ['/landlord', '/admin'];
+
+export default function LayoutWrapper({ children }: { children: React.ReactNode }) {
+    const pathname = usePathname();
+    const hideChrome = CHROME_FREE_ROUTES.some((route) => pathname?.startsWith(route));
+
+    if (hideChrome) {
+        return <>{children}</>;
+    }
+
+    return (
+        <>
+            <Header />
+            <main>{children}</main>
+            <Footer />
+        </>
+    );
+}

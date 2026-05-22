@@ -1,15 +1,31 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { registerLandlordAction } from '@/app/actions/nestActions';
+import { getUserProfileAction } from '@/app/actions/nestActions';
 import type { LandlordRegisterRequest } from '@/lib/types/api.types';
 
 export default function LandlordRegistrationPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        const role = localStorage.getItem('userRole');
+        if (!token || role !== 'landlord') return;
+        getUserProfileAction(token).then((result) => {
+            if (!result.data) return;
+            const { kyc_status } = result.data;
+            if (kyc_status === 'rejected') {
+                router.replace('/landlord-registration/id-verification');
+            } else {
+                router.replace('/landlord/listings');
+            }
+        });
+    }, [router]);
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState<LandlordRegisterRequest>({
         full_name: '',
