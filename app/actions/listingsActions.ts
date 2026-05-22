@@ -19,6 +19,8 @@ import type {
   ModerationApproveResponse,
   ModerationRejectResponse,
   NeighborhoodResponse,
+  PropertyType,
+  PublicListing,
   ScamReportResponse,
   Step1IdentityRequest,
   Step1IdentityResponse,
@@ -305,6 +307,20 @@ export async function deleteDraftListingAction(accessToken: string, listingId: s
     revalidatePath('/landlord/listings');
   }
   return result;
+}
+
+export async function getPublicListingsAction(params?: {
+  property_type?: PropertyType;
+  neighborhood_id?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.property_type) query.set('property_type', params.property_type);
+  if (params?.neighborhood_id) query.set('neighborhood_id', params.neighborhood_id);
+  const qs = query.toString();
+  return nestRequest<PublicListing[]>(`/api/v1/listings${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+    next: { revalidate: 60, tags: ['listings'] },
+  });
 }
 
 export async function getListingsHealthAction() {

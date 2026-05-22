@@ -368,6 +368,24 @@ export interface ListingLifecycleResponse {
   message: string;
 }
 
+export interface PublicListing {
+  id: string;
+  full_address?: string | null;
+  neighborhood_name?: string | null;
+  property_type?: PropertyType | null;
+  floor_level?: FloorLevel | null;
+  monthly_rent_rwf?: number | null;
+  security_deposit_rwf?: number | null;
+  utilities?: UtilityType[] | null;
+  lease_durations?: LeaseDuration[] | null;
+  cover_url?: string | null;
+  media?: ListingMedia[];
+  calendar?: CalendarEntry[] | null;
+  house_rules?: HouseRules | null;
+  status: ListingStatus;
+  verified_badge?: boolean;
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export interface NotificationResponse {
