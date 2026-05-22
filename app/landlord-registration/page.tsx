@@ -1,15 +1,50 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { registerLandlordAction } from '@/app/actions/nestActions';
+import { getUserProfileAction } from '@/app/actions/nestActions';
 import type { LandlordRegisterRequest } from '@/lib/types/api.types';
+
+const COUNTRY_CODES = [
+    { code: '+250', label: '🇷🇼 +250' },
+    { code: '+256', label: '🇺🇬 +256' },
+    { code: '+254', label: '🇰🇪 +254' },
+    { code: '+255', label: '🇹🇿 +255' },
+    { code: '+257', label: '🇧🇮 +257' },
+    { code: '+243', label: '🇨🇩 +243' },
+    { code: '+251', label: '🇪🇹 +251' },
+    { code: '+27',  label: '🇿🇦 +27'  },
+    { code: '+234', label: '🇳🇬 +234' },
+    { code: '+233', label: '🇬🇭 +233' },
+    { code: '+1',   label: '🇺🇸 +1'   },
+    { code: '+44',  label: '🇬🇧 +44'  },
+    { code: '+33',  label: '🇫🇷 +33'  },
+    { code: '+91',  label: '🇮🇳 +91'  },
+];
 
 export default function LandlordRegistrationPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [countryCode, setCountryCode] = useState('+250');
+    const [phoneLocal, setPhoneLocal] = useState('');
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        const role = localStorage.getItem('userRole');
+        if (!token || role !== 'landlord') return;
+        getUserProfileAction(token).then((result) => {
+            if (!result.data) return;
+            const { kyc_status } = result.data;
+            if (kyc_status === 'rejected') {
+                router.replace('/landlord-registration/id-verification');
+            } else {
+                router.replace('/landlord/listings');
+            }
+        });
+    }, [router]);
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState<LandlordRegisterRequest>({
         full_name: '',
@@ -144,17 +179,30 @@ export default function LandlordRegistrationPage() {
                                 <div className="space-y-2">
                                     <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300" htmlFor="phone">Phone Number</label>
                                     <div className="flex">
-                                        <span className="inline-flex items-center px-3 text-sm text-slate-500 bg-slate-100 dark:bg-slate-800 border border-slate-300 border-r-0 dark:border-slate-700 rounded-l-lg">
-                                            +250
-                                        </span>
+                                        <select
+                                            value={countryCode}
+                                            onChange={(e) => {
+                                                setCountryCode(e.target.value);
+                                                setFormData((prev) => ({ ...prev, phone: e.target.value + phoneLocal }));
+                                            }}
+                                            className="shrink-0 px-2 py-3 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 border-r-0 rounded-l-lg focus:ring-2 focus:ring-primary outline-none text-slate-700 dark:text-slate-300 text-sm cursor-pointer"
+                                        >
+                                            {COUNTRY_CODES.map(({ code, label }) => (
+                                                <option key={code} value={code}>{label}</option>
+                                            ))}
+                                        </select>
                                         <input
                                             className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-r-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
                                             id="phone"
                                             name="phone"
                                             placeholder="7XX XXX XXX"
                                             type="tel"
-                                            value={formData.phone}
-                                            onChange={handleChange}
+                                            value={phoneLocal}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setPhoneLocal(val);
+                                                setFormData((prev) => ({ ...prev, phone: countryCode + val }));
+                                            }}
                                             required
                                         />
                                     </div>

@@ -8,7 +8,12 @@ import {
     approveLandlordKycAction,
     rejectLandlordKycAction,
 } from '@/app/actions/nestActions';
-import type { LandlordKycDetail, PendingKycUser } from '@/lib/types/api.types';
+import {
+    getListingReviewQueueAction,
+    approveListingAction,
+    rejectListingAction,
+} from '@/app/actions/listingsActions';
+import type { LandlordKycDetail, PendingKycUser, ListingModerationQueueItem } from '@/lib/types/api.types';
 
 const SUPABASE_STORAGE_BASE =
     (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://rsroaeikcfuadqapeqqz.supabase.co') + '/storage/v1';
@@ -28,7 +33,7 @@ function docsFromDetail(detail: LandlordKycDetail) {
     }));
 }
 
-type Tab = 'overview' | 'landlord-approvals' | 'student-verifications';
+type Tab = 'overview' | 'landlord-approvals' | 'student-verifications' | 'listing-reviews';
 
 // ── Review modal (fetches docs, approve / reject) ─────────────────────────────
 function ReviewModal({
@@ -289,6 +294,14 @@ export default function AdminDashboardPage() {
     const [reviewTarget, setReviewTarget] = useState<PendingKycUser | null>(null);
     const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
+    // Listing reviews state
+    const [listingQueue, setListingQueue] = useState<ListingModerationQueueItem[]>([]);
+    const [listingsLoading, setListingsLoading] = useState(false);
+    const [listingsError, setListingsError] = useState<string | null>(null);
+    const [listingBusyId, setListingBusyId] = useState<string | null>(null);
+    const [rejectListingTarget, setRejectListingTarget] = useState<string | null>(null);
+    const [rejectReason, setRejectReason] = useState('');
+
     const showToast = (msg: string, ok: boolean) => {
         setToast({ msg, ok });
         setTimeout(() => setToast(null), 3500);
@@ -312,9 +325,46 @@ export default function AdminDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const loadListingQueue = useCallback(async () => {
+        const token = getToken();
+        if (!token) return;
+        setListingsLoading(true);
+        setListingsError(null);
+        const result = await getListingReviewQueueAction(token);
+        setListingsLoading(false);
+        if (result.error) { setListingsError(result.error.message); return; }
+        setListingQueue(result.data ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const handleApproveListing = async (listingId: string) => {
+        const token = getToken();
+        if (!token) return;
+        setListingBusyId(listingId);
+        const result = await approveListingAction(token, listingId);
+        setListingBusyId(null);
+        if (result.error) { showToast(result.error.message, false); return; }
+        showToast('Listing approved.', true);
+        setListingQueue((prev) => prev.filter((l) => l.listing_id !== listingId));
+    };
+
+    const handleRejectListing = async () => {
+        const token = getToken();
+        if (!token || !rejectListingTarget || !rejectReason.trim()) return;
+        setListingBusyId(rejectListingTarget);
+        const result = await rejectListingAction(token, rejectListingTarget, rejectReason.trim());
+        setListingBusyId(null);
+        setRejectListingTarget(null);
+        setRejectReason('');
+        if (result.error) { showToast(result.error.message, false); return; }
+        showToast('Listing rejected.', true);
+        setListingQueue((prev) => prev.filter((l) => l.listing_id !== rejectListingTarget));
+    };
+
     useEffect(() => {
         if (tab === 'landlord-approvals') loadPendingKyc();
-    }, [tab, loadPendingKyc]);
+        if (tab === 'listing-reviews') loadListingQueue();
+    }, [tab, loadPendingKyc, loadListingQueue]);
 
     const handleApprove = async (user: PendingKycUser) => {
         const token = getToken();
@@ -343,6 +393,7 @@ export default function AdminDashboardPage() {
         { id: 'overview', label: 'Overview', icon: 'dashboard' },
         { id: 'student-verifications', label: 'Student Verifications', icon: 'how_to_reg' },
         { id: 'landlord-approvals', label: 'Landlord Approvals', icon: 'domain_verification' },
+        { id: 'listing-reviews', label: 'Listing Reviews', icon: 'rate_review' },
     ];
 
     return (
@@ -375,6 +426,11 @@ export default function AdminDashboardPage() {
                             {n.id === 'landlord-approvals' && pendingKyc.length > 0 && (
                                 <span className="ml-auto bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                                     {pendingKyc.length}
+                                </span>
+                            )}
+                            {n.id === 'listing-reviews' && listingQueue.length > 0 && (
+                                <span className="ml-auto bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                    {listingQueue.length}
                                 </span>
                             )}
                         </button>
@@ -655,6 +711,132 @@ export default function AdminDashboardPage() {
                                             user={user}
                                             onReview={() => setReviewTarget(user)}
                                         />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Listing Reviews tab ── */}
+                    {tab === 'listing-reviews' && (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Listing Reviews</h2>
+                                    <p className="text-slate-500 text-sm mt-1">Review listings submitted for moderation and approve or reject each one.</p>
+                                </div>
+                                <button
+                                    onClick={loadListingQueue}
+                                    disabled={listingsLoading}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                                >
+                                    <span className={`material-symbols-outlined text-[18px] ${listingsLoading ? 'animate-spin' : ''}`}>refresh</span>
+                                    Refresh
+                                </button>
+                            </div>
+
+                            {listingsError && (
+                                <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                                    <span className="material-symbols-outlined text-red-500">error</span>
+                                    <p className="text-sm font-medium text-red-700 dark:text-red-400">{listingsError}</p>
+                                </div>
+                            )}
+
+                            {listingsLoading && (
+                                <div className="flex items-center justify-center py-20">
+                                    <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+                                </div>
+                            )}
+
+                            {!listingsLoading && !listingsError && listingQueue.length === 0 && (
+                                <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+                                    <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600">task_alt</span>
+                                    <p className="font-semibold text-slate-600 dark:text-slate-400">No listings pending review</p>
+                                    <p className="text-sm text-slate-400">All submissions have been processed.</p>
+                                </div>
+                            )}
+
+                            {!listingsLoading && listingQueue.length > 0 && (
+                                <div className="space-y-4">
+                                    {listingQueue.map((item) => (
+                                        <div key={item.listing_id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col sm:flex-row">
+                                            {/* Cover */}
+                                            <div className="w-full sm:w-48 h-36 sm:h-auto shrink-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                                {item.cover_url ? (
+                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                    <img src={item.cover_url} alt="Listing" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">apartment</span>
+                                                )}
+                                            </div>
+                                            <div className="p-5 flex-1 flex flex-col">
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <div>
+                                                        <h4 className="font-bold text-slate-900 dark:text-white">{item.full_address}</h4>
+                                                        <p className="text-sm text-slate-500 mt-0.5">
+                                                            {item.neighborhood_name && <span>{item.neighborhood_name} · </span>}
+                                                            <span className="capitalize">{item.property_type.replace('_', ' ')}</span>
+                                                        </p>
+                                                    </div>
+                                                    <span className="font-bold text-primary text-sm shrink-0 ml-4">RWF {item.monthly_rent_rwf.toLocaleString()}/mo</span>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-500 mb-4">
+                                                    <span><span className="font-semibold text-slate-700 dark:text-slate-300">Owner:</span> {item.owner_name}</span>
+                                                    <span><span className="font-semibold text-slate-700 dark:text-slate-300">Email:</span> {item.owner_email}</span>
+                                                    <span><span className="font-semibold text-slate-700 dark:text-slate-300">Photos:</span> {item.media_count}</span>
+                                                    <span><span className="font-semibold text-slate-700 dark:text-slate-300">Submitted:</span> {new Date(item.submitted_at).toLocaleDateString()}</span>
+                                                </div>
+                                                <div className="flex items-center gap-3 mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
+                                                    {rejectListingTarget === item.listing_id ? (
+                                                        <>
+                                                            <input
+                                                                autoFocus
+                                                                type="text"
+                                                                placeholder="Rejection reason (required)"
+                                                                value={rejectReason}
+                                                                onChange={(e) => setRejectReason(e.target.value)}
+                                                                className="flex-1 h-9 px-3 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-red-400"
+                                                            />
+                                                            <button
+                                                                onClick={handleRejectListing}
+                                                                disabled={!rejectReason.trim() || listingBusyId === item.listing_id}
+                                                                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
+                                                            >
+                                                                {listingBusyId === item.listing_id ? '…' : 'Confirm Reject'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setRejectListingTarget(null); setRejectReason(''); }}
+                                                                className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={() => setRejectListingTarget(item.listing_id)}
+                                                                disabled={!!listingBusyId}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold bg-red-50 dark:bg-red-900/20 hover:bg-red-100 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">cancel</span>
+                                                                Reject
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleApproveListing(item.listing_id)}
+                                                                disabled={!!listingBusyId}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+                                                            >
+                                                                {listingBusyId === item.listing_id
+                                                                    ? <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+                                                                    : <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                                                                }
+                                                                Approve
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             )}

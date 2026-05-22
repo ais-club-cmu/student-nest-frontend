@@ -159,3 +159,240 @@ export interface UserProfileResponse {
   last_login_at: string | null;
   created_at: string;
 }
+
+// ── Listings ──────────────────────────────────────────────────────────────────
+
+export type PropertyType = 'single_room' | 'shared_room' | 'self_contained_studio' | 'full_apartment';
+export type FloorLevel = 'ground' | 'first' | 'second' | 'third' | 'fourth_plus';
+export type ListingStatus = 'draft' | 'pending_review' | 'active' | 'filled' | 'archived';
+export type ListingType = 'standard' | 'torch_pass';
+export type CalendarStatus = 'available' | 'occupied' | 'unavailable';
+export type UtilityType = 'electricity' | 'water' | 'gas' | 'security' | 'garbage';
+export type LeaseDuration = '1_month' | '3_months' | '6_months' | '12_months' | 'flexible';
+export type SmokingPolicy = 'allowed' | 'no_smoking' | 'outside_only';
+export type GenderPreference = 'female_only' | 'male_only' | 'no_preference';
+export type VisitorPolicy = 'visitors_allowed' | 'no_visitors' | 'no_overnight_visitors';
+
+export interface NeighborhoodResponse {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface ListingMedia {
+  id: string;
+  url: string;
+  display_order: number;
+  is_cover: boolean;
+  width_px?: number;
+  height_px?: number;
+}
+
+export interface ListingProgress {
+  step_1_completed: boolean;
+  step_2_completed: boolean;
+  step_3_completed: boolean;
+  step_4_completed: boolean;
+  step_5_completed: boolean;
+  next_step: number;
+  can_submit: boolean;
+}
+
+export interface CalendarEntry {
+  month: number;
+  year: number;
+  status: CalendarStatus;
+}
+
+export interface HouseRules {
+  pets_allowed?: string | null;
+  smoking_policy?: SmokingPolicy | null;
+  gender_preference?: GenderPreference | null;
+  visitor_policy?: VisitorPolicy | null;
+  quiet_hours_start_utc?: string | null;
+  quiet_hours_end_utc?: string | null;
+  additional_rules?: string | null;
+  virtual_tour_url?: string | null;
+}
+
+export interface ListingDraftResponse {
+  id: string;
+  listing_type: ListingType;
+  status: ListingStatus;
+  created_at: string;
+  full_address?: string | null;
+  neighborhood_id?: string | null;
+  property_type?: PropertyType | null;
+  floor_level?: FloorLevel | null;
+  monthly_rent_rwf?: number | null;
+  security_deposit_rwf?: number | null;
+  utilities?: UtilityType[] | null;
+  lease_durations?: LeaseDuration[] | null;
+  house_rules?: HouseRules | null;
+  calendar?: CalendarEntry[] | null;
+  media: ListingMedia[];
+  progress: ListingProgress;
+}
+
+export interface DraftListResponse {
+  drafts: ListingDraftResponse[];
+}
+
+export interface Step1IdentityRequest {
+  listing_type?: ListingType;
+  full_address: string;
+  neighborhood_id: string;
+  property_type: PropertyType;
+  floor_level: FloorLevel;
+}
+
+export interface Step1IdentityResponse {
+  draft: ListingDraftResponse;
+  warning?: string | null;
+}
+
+export interface Step2PricingRequest {
+  monthly_rent_rwf: number;
+  security_deposit_rwf?: number | null;
+  utilities?: UtilityType[] | null;
+  lease_durations?: LeaseDuration[] | null;
+  confirm_above_average?: boolean;
+}
+
+export interface Step2PricingResponse {
+  draft: ListingDraftResponse;
+  usd_equivalent?: number | null;
+  rate_used_rwf_per_usd?: number | null;
+  using_cached_rate?: boolean;
+  neighborhood_average_rwf?: number | null;
+  warning?: string | null;
+}
+
+export interface MediaUploadResponse {
+  id: string;
+  display_order: number;
+  is_cover: boolean;
+  url: string;
+  width_px: number;
+  height_px: number;
+  total_uploaded: number;
+  can_proceed: boolean;
+}
+
+export interface MediaReorderItem {
+  media_id: string;
+  display_order: number;
+}
+
+export interface MediaDeleteResponse {
+  message: string;
+  total_uploaded: number;
+  can_proceed: boolean;
+}
+
+export interface Step3CompleteResponse {
+  draft: ListingDraftResponse;
+  total_uploaded: number;
+}
+
+export interface ListingSubmitResponse {
+  listing_id: string;
+  status: ListingStatus;
+  message: string;
+  duplicate_flags: string[];
+}
+
+export interface ListingModerationQueueItem {
+  listing_id: string;
+  full_address: string;
+  neighborhood_name?: string | null;
+  property_type: PropertyType;
+  monthly_rent_rwf: number;
+  owner_name: string;
+  owner_email: string;
+  submitted_at: string;
+  media_count: number;
+  cover_url?: string | null;
+}
+
+export interface ModerationApproveResponse {
+  listing_id: string;
+  status: ListingStatus;
+  verified_badge: boolean;
+  message: string;
+}
+
+export interface ModerationRejectResponse {
+  listing_id: string;
+  status: ListingStatus;
+  message: string;
+}
+
+export interface ScamReportResponse {
+  listing_id: string;
+  total_reports: number;
+  escalated: boolean;
+  message: string;
+}
+
+export interface ListingDashboardCard {
+  id: string;
+  full_address?: string | null;
+  neighborhood_name?: string | null;
+  property_type?: PropertyType | null;
+  monthly_rent_rwf?: number | null;
+  status: ListingStatus;
+  cover_url?: string | null;
+}
+
+export interface ListingDashboardSummary {
+  active: number;
+  pending_review: number;
+  filled: number;
+  archived: number;
+  drafts: number;
+}
+
+export interface ListingDashboardResponse {
+  summary: ListingDashboardSummary;
+  active: ListingDashboardCard[];
+  pending_review: ListingDashboardCard[];
+  filled: ListingDashboardCard[];
+  archived: ListingDashboardCard[];
+  drafts: ListingDashboardCard[];
+}
+
+export interface ListingLifecycleResponse {
+  listing_id: string;
+  status: ListingStatus;
+  message: string;
+}
+
+export interface PublicListing {
+  id: string;
+  full_address?: string | null;
+  neighborhood_name?: string | null;
+  property_type?: PropertyType | null;
+  floor_level?: FloorLevel | null;
+  monthly_rent_rwf?: number | null;
+  security_deposit_rwf?: number | null;
+  utilities?: UtilityType[] | null;
+  lease_durations?: LeaseDuration[] | null;
+  cover_url?: string | null;
+  media?: ListingMedia[];
+  calendar?: CalendarEntry[] | null;
+  house_rules?: HouseRules | null;
+  status: ListingStatus;
+  verified_badge?: boolean;
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export interface NotificationResponse {
+  id: string;
+  title: string;
+  body: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  is_read: boolean;
+}

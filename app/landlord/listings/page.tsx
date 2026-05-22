@@ -1,298 +1,370 @@
-import React from 'react';
-import Link from 'next/link';
+'use client';
 
-export default function LandlordListingsPage() {
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+    getListingDashboardAction,
+    markFilledAction,
+    archiveListingAction,
+    deleteDraftListingAction,
+} from '@/app/actions/listingsActions';
+import { getUserProfileAction } from '@/app/actions/nestActions';
+import { handleAuthError } from '@/lib/auth-redirect';
+import type { ListingDashboardCard, ListingDashboardResponse, ListingStatus } from '@/lib/types/api.types';
+
+type FilterTab = 'all' | ListingStatus;
+
+const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
+    active: { label: 'Active', dot: 'bg-emerald-500', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+    pending_review: { label: 'Under Review', dot: 'bg-amber-500', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+    filled: { label: 'Filled', dot: 'bg-blue-500', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+    archived: { label: 'Archived', dot: 'bg-slate-400', badge: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' },
+    draft: { label: 'Draft', dot: 'bg-slate-300', badge: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
+};
+
+function fmtRwf(n: number | null | undefined) { return n != null ? `RWF ${n.toLocaleString()}` : '—'; }
+
+const API_BASE = process.env.NEXT_PUBLIC_NEST_API_BASE_URL ?? '';
+function mediaUrl(url: string) { return url.startsWith('http') ? url : `${API_BASE}${url}`; }
+
+function ListingCard({ card, onAction }: { card: ListingDashboardCard; onAction: () => void }) {
+    const router = useRouter();
+    const [busy, setBusy] = useState(false);
+    const cfg = STATUS_CONFIG[card.status] ?? STATUS_CONFIG.draft;
+
+    const handleMark = async (action: 'filled' | 'archive' | 'delete') => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        setBusy(true);
+        if (action === 'filled') await markFilledAction(token, card.id);
+        else if (action === 'archive') await archiveListingAction(token, card.id);
+        else await deleteDraftListingAction(token, card.id);
+        setBusy(false);
+        onAction();
+    };
+
     return (
-        <div className="flex min-h-[calc(100vh-80px)] font-display bg-background-light dark:bg-slate-950/50">
-            {/* Sidebar Navigation */}
-            <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-10">
-                <div className="p-6 flex items-center gap-3">
-                    <div className="bg-primary rounded-lg p-2 text-white">
-                        <span className="material-symbols-outlined block">home_work</span>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col lg:flex-row shadow-sm hover:shadow-md transition-shadow">
+            {/* Cover image */}
+            <div className="relative w-full lg:w-56 h-44 lg:h-auto shrink-0 bg-slate-100 dark:bg-slate-800">
+                {card.cover_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={mediaUrl(card.cover_url)} alt="Listing" className="w-full h-full object-cover" />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600">apartment</span>
                     </div>
+                )}
+                <div className="absolute top-3 left-3">
+                    <span className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${cfg.badge}`}>
+                        <span className={`size-1.5 rounded-full ${cfg.dot}`} />
+                        {cfg.label}
+                    </span>
+                </div>
+            </div>
+
+            <div className="p-5 flex-1 flex flex-col">
+                <div className="flex items-start justify-between mb-2">
                     <div>
-                        <h1 className="font-bold text-lg leading-none text-slate-900 dark:text-white">StudentNest</h1>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Landlord Portal</p>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">
+                            {card.full_address}
+                        </h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm flex items-center gap-1 mt-0.5">
+                            <span className="material-symbols-outlined text-base">location_on</span>
+                            {card.neighborhood_name ?? 'Unknown neighbourhood'}{card.property_type ? <> · <span className="capitalize">{card.property_type.replace(/_/g, ' ')}</span></> : null}
+                        </p>
+                    </div>
+                    <div className="text-right shrink-0 ml-4">
+                        <p className="font-bold text-primary text-lg">{fmtRwf(card.monthly_rent_rwf)}</p>
+                        <p className="text-xs text-slate-400">/ month</p>
                     </div>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-1 mt-4">
-                    <Link href="/landlord" className="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                <div className="mt-auto flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    {card.status === 'draft' && (
+                        <>
+                            <button onClick={() => router.push('/landlord/listings/add')} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                                Continue Draft
+                            </button>
+                            <button onClick={() => handleMark('delete')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 dark:bg-red-900/20 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-50">
+                                Delete
+                            </button>
+                        </>
+                    )}
+                    {card.status === 'pending_review' && (
+                        <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-amber-500 text-base">schedule</span>
+                            Under review — usually 24–48 hours
+                        </p>
+                    )}
+                    {card.status === 'active' && (
+                        <>
+                            <button onClick={() => handleMark('filled')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 dark:bg-blue-900/20 text-blue-600 hover:bg-blue-100 transition-colors disabled:opacity-50">
+                                Mark Filled
+                            </button>
+                            <button onClick={() => handleMark('archive')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50">
+                                Archive
+                            </button>
+                        </>
+                    )}
+                    {card.status === 'filled' && (
+                        <button onClick={() => handleMark('archive')} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50">
+                            Archive
+                        </button>
+                    )}
+                    {busy && (
+                        <span className="material-symbols-outlined animate-spin text-primary text-base ml-auto">progress_activity</span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function LandlordListingsPage() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const [dashboard, setDashboard] = useState<ListingDashboardResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [tab, setTab] = useState<FilterTab>('all');
+    const [successBanner, setSuccessBanner] = useState(searchParams.get('submitted') === '1');
+    const [kycPendingReview, setKycPendingReview] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    const load = useCallback(async () => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) { router.push('/login'); return; }
+
+        const profileResult = await getUserProfileAction(token);
+        if (profileResult.error) {
+            if (handleAuthError(profileResult.error, router)) return;
+        }
+        if (profileResult.data) {
+            const { kyc_status } = profileResult.data;
+            if (kyc_status === 'rejected') {
+                router.replace('/landlord-registration/id-verification');
+                return;
+            }
+            setKycPendingReview(kyc_status === 'pending');
+        }
+
+        setLoading(true);
+        const result = await getListingDashboardAction(token);
+        setLoading(false);
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            setError(result.error.message);
+            return;
+        }
+        setDashboard(result.data);
+    }, [router]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const allCards = dashboard
+        ? [
+            ...dashboard.active,
+            ...dashboard.pending_review,
+            ...dashboard.filled,
+            ...dashboard.archived,
+            ...dashboard.drafts,
+          ]
+        : [];
+
+    const filtered = tab === 'all' ? allCards : allCards.filter((c) => c.status === tab);
+    const s = dashboard?.summary;
+
+    const TABS: { value: FilterTab; label: string; count?: number }[] = [
+        { value: 'all', label: 'All', count: allCards.length },
+        { value: 'active', label: 'Active', count: s?.active },
+        { value: 'pending_review', label: 'Under Review', count: s?.pending_review },
+        { value: 'filled', label: 'Filled', count: s?.filled },
+        { value: 'archived', label: 'Archived', count: s?.archived },
+        { value: 'draft', label: 'Drafts', count: s?.drafts },
+    ];
+
+    return (
+        <div className="flex min-h-screen font-display bg-background-light dark:bg-slate-950/50">
+
+            {/* Mobile backdrop */}
+            {sidebarOpen && (
+                <div
+                    className="fixed inset-0 z-20 bg-black/40 md:hidden"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
+            {/* Sidebar */}
+            <aside className={`fixed inset-y-0 left-0 z-30 w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col transition-transform duration-300 ease-in-out
+                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+                <div className="p-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-primary rounded-lg p-2 text-white">
+                            <span className="material-symbols-outlined block">home_work</span>
+                        </div>
+                        <div>
+                            <h1 className="font-bold text-lg leading-none text-slate-900 dark:text-white">StudentNest</h1>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Landlord Portal</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+                    <Link href="/landlord" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                         <span className="material-symbols-outlined">dashboard</span>
                         <span className="text-sm font-medium">Overview</span>
                     </Link>
-                    <Link href="/landlord/listings" className="flex items-center gap-3 px-3 py-2 bg-primary/10 text-primary rounded-lg">
-                        <span className="material-symbols-outlined fill">list_alt</span>
+                    <Link href="/landlord/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 bg-primary/10 text-primary rounded-lg">
+                        <span className="material-symbols-outlined">list_alt</span>
                         <span className="text-sm font-medium">My Listings</span>
                     </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                        <span className="material-symbols-outlined text-xl">description</span>
-                        <span className="text-sm font-medium">Applications</span>
-                        <span className="ml-auto bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-full">3</span>
+                    <Link href="/landlord/notifications" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                        <span className="material-symbols-outlined">notifications</span>
+                        <span className="text-sm font-medium">Notifications</span>
                     </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                        <span className="material-symbols-outlined">payments</span>
-                        <span className="text-sm font-medium">Payments</span>
-                    </Link>
-                    <Link href="#" className="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                        <span className="material-symbols-outlined">star</span>
-                        <span className="text-sm font-medium">Reviews</span>
-                    </Link>
-
-                    <Link href="/landlord-registration/id-verification" className="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                        <span className="material-symbols-outlined">verified_user</span>
-                        <span className="text-sm font-medium">ID Verification</span>
-                    </Link>
-
                     <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
-                        <Link href="#" className="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                            <span className="material-symbols-outlined">settings</span>
-                            <span className="text-sm font-medium">Settings</span>
-                        </Link>
+                        <button onClick={() => { localStorage.clear(); router.push('/'); }} className="flex items-center gap-3 px-3 py-2.5 w-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                            <span className="material-symbols-outlined">logout</span>
+                            <span className="text-sm font-medium">Logout</span>
+                        </button>
                     </div>
                 </nav>
-
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800 mb-20 md:mb-0">
-                    <div className="flex items-center gap-3 p-2">
-                        <img
-                            className="size-9 rounded-full object-cover"
-                            data-alt="Landlord profile headshot"
-                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuClPJXak9r31LeAPMZyURDSwrlx1BhO-y0dOW_2Qxrfmp7ulyG8V5Yk7Dvwcp__pXho6uYfnGrX4eLlRBydhIbX9aF5GLfumKKGiQHnUdQMH0EH_7hNnE66-g3WO9JcT6wf_zBS5nWThGjsbXWQ5G8gpgMx3R8STeIzzJOgd4H0FC7ZlBYKKzhyMvKMHJ4_sggZmlI-bkv_OZuJvjn4qw1ErI-m6VzBXRCvnG7gv6yr4QoeKZDrpr9qWc4KwFq3quIiYJL8jtKm2h41"
-                            alt="Profile"
-                        />
-                        <div className="overflow-hidden">
-                            <p className="text-sm font-medium truncate text-slate-900 dark:text-white">Jean Pierre</p>
-                            <p className="text-xs text-slate-500 truncate">Premium Landlord</p>
-                        </div>
-                    </div>
+                <div className="p-4">
+                    <Link href="/landlord/listings/add">
+                        <button className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm">
+                            <span className="material-symbols-outlined text-sm">add</span>
+                            Add New Listing
+                        </button>
+                    </Link>
                 </div>
             </aside>
 
-            {/* Main Content */}
-            <main className="flex-1 ml-64 flex flex-col min-w-0">
-                {/* Header */}
-                <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-8 flex items-center justify-between sticky top-0 z-10">
-                    <div className="flex items-center gap-4 flex-1 max-w-xl">
-                        <div className="relative w-full">
-                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                            <input
-                                className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 transition-all text-slate-900 dark:text-white"
-                                placeholder="Search your listings..."
-                                type="text"
-                                name="search"
-                            />
-                        </div>
+            {/* Main */}
+            <main className="flex-1 md:ml-64 flex flex-col min-w-0">
+                <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 md:px-8 flex items-center justify-between sticky top-0 z-10">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <span className="material-symbols-outlined">menu</span>
+                        </button>
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">My Listings</h2>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <button className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm">
-                            <span className="material-symbols-outlined text-lg">add_circle</span>
-                            <span className="hidden sm:inline">Add New Listing</span>
+                    <div className="flex items-center gap-3">
+                        <button onClick={load} disabled={loading} className="p-2 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50">
+                            <span className={`material-symbols-outlined ${loading ? 'animate-spin' : ''}`}>refresh</span>
                         </button>
-                        <button className="relative p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                            <span className="material-symbols-outlined">notifications</span>
-                            <span className="absolute top-2 right-2 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
-                        </button>
+                        <Link href="/landlord/listings/add">
+                            <button className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm">
+                                <span className="material-symbols-outlined text-lg">add_circle</span>
+                                <span className="hidden sm:inline">Add Listing</span>
+                            </button>
+                        </Link>
                     </div>
                 </header>
 
-                {/* Content Area */}
-                <div className="p-8 max-w-7xl mx-auto w-full">
-                    <div className="flex flex-col gap-6">
+                <div className="p-8 max-w-5xl mx-auto w-full">
 
-                        {/* Title & Filter Bar */}
-                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    {kycPendingReview && (
+                        <div className="flex items-center gap-3 mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+                            <span className="material-symbols-outlined text-amber-500 shrink-0">pending</span>
                             <div>
-                                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">My Listings</h2>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm">Manage your properties and track their performance</p>
-                            </div>
-                            <div className="flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto whitespace-nowrap">
-                                <button className="px-4 py-1.5 text-sm font-medium rounded-lg bg-primary text-white transition-colors">All</button>
-                                <button className="px-4 py-1.5 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Active</button>
-                                <button className="px-4 py-1.5 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Rented</button>
-                                <button className="px-4 py-1.5 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Under Review</button>
-                                <button className="px-4 py-1.5 text-sm font-medium rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">Draft</button>
+                                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">KYC verification in progress</p>
+                                <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Your identity documents are under review. You can prepare your listings now — they&apos;ll be submitted once your account is verified.</p>
                             </div>
                         </div>
+                    )}
 
-                        {/* Listings Grid */}
-                        <div className="grid grid-cols-1 gap-6">
-                            {/* Listing Card 1: Active */}
-                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col lg:flex-row shadow-sm hover:shadow-md transition-shadow">
-                                <div className="relative w-full lg:w-72 h-48 lg:h-auto shrink-0">
-                                    <img
-                                        className="w-full h-full object-cover"
-                                        data-alt="Modern studio apartment interior"
-                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuBXUDfqeAk_j5rozgfZ6UidPEwtVVoY5YHk1ZZmsfA49fdGiyew7Mq5M37bWbm4UxmNZw4rvfvUCdhiQIBeGFH4r36CHgNx_YqIgkdDTZILqnowRkfCLlqq0kHNTwsWTKbxj-FOxq_CEnV7VFmk4Dz3sfzQiKDIsmXWY1i4sLIiQzZ2p8t7h9jTkekdrHnmH41U3RdlcsLRB7OtusBxlQrkfkY2I1ifv3Y_XBnm_w4tywdcShAN2tQ8hXAiGgdJE7a2u2za_6s7eJiC"
-                                        alt="Property"
-                                    />
-                                    <div className="absolute top-3 left-3">
-                                        <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                                            <span className="size-1.5 bg-emerald-500 rounded-full"></span>
-                                            Active
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="p-6 flex-1 flex flex-col">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div>
-                                            <h3 className="text-xl font-bold mb-1 text-slate-900 dark:text-white">Modern Studio in Kigali</h3>
-                                            <div className="flex items-center text-slate-500 dark:text-slate-400 text-sm gap-1">
-                                                <span className="material-symbols-outlined text-lg">location_on</span>
-                                                Kacyiru, Kigali
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xl font-bold text-primary">$450</p>
-                                            <p className="text-xs text-slate-500">per month</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Stats */}
-                                    <div className="flex items-center gap-6 py-4 border-y border-slate-100 dark:border-slate-800 my-4">
-                                        <div className="flex flex-col">
-                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Views</span>
-                                            <span className="text-lg font-bold text-slate-900 dark:text-white">1,240</span>
-                                        </div>
-                                        <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 pl-6">
-                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Applications</span>
-                                            <span className="text-lg font-bold text-slate-900 dark:text-white">15</span>
-                                        </div>
-                                        <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 pl-6">
-                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Inquiries</span>
-                                            <span className="text-lg font-bold text-slate-900 dark:text-white">8</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex items-center justify-between mt-auto">
-                                        <div className="flex gap-2">
-                                            <button className="bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Edit</button>
-                                            <button className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Deactivate</button>
-                                        </div>
-                                        <button className="flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium">
-                                            View Details
-                                            <span className="material-symbols-outlined text-lg">arrow_forward</span>
-                                        </button>
-                                    </div>
-                                </div>
+                    {successBanner && (
+                        <div className="flex items-center justify-between mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <span className="material-symbols-outlined text-emerald-500">check_circle</span>
+                                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Listing submitted successfully! It&apos;s now under review.</p>
                             </div>
-
-                            {/* Listing Card 2: Rented */}
-                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col lg:flex-row shadow-sm hover:shadow-md transition-shadow opacity-90">
-                                <div className="relative w-full lg:w-72 h-48 lg:h-auto shrink-0">
-                                    <img
-                                        className="w-full h-full object-cover"
-                                        data-alt="Luxury 2 bedroom apartment living room"
-                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuArBD3XZKuTKbf_ZKpJVKsxTxUttM28fZ3l0aMwPAlWzZb-nBYhHUPX4p8CMNYCjpHi-MNmXc0xrLdWMLoHtWYP7BSCeGkebG8jgKFJWMh8macDlexsrZ8lErTHmSRmmogkv5hdE9UjG-Poq0ckrNIDJZUIoxRaOmsbY7vmJVKzpMKPgx_HoydeHGhMWT7x9UWV6UgJuTW3fHHaDvtJ8ZUKofLRMVugo7-0bV26sgXVSfI80ERhh3hoOZ42TyPTApFSTe0Wjks99CTo"
-                                        alt="Property"
-                                    />
-                                    <div className="absolute top-3 left-3">
-                                        <span className="bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                                            <span className="size-1.5 bg-slate-500 rounded-full"></span>
-                                            Rented
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="p-6 flex-1 flex flex-col">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div>
-                                            <h3 className="text-xl font-bold mb-1 text-slate-900 dark:text-white">Luxury 2BR Apartment</h3>
-                                            <div className="flex items-center text-slate-500 dark:text-slate-400 text-sm gap-1">
-                                                <span className="material-symbols-outlined text-lg">location_on</span>
-                                                Nyarutarama, Kigali
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xl font-bold text-primary">$800</p>
-                                            <p className="text-xs text-slate-500">per month</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Stats */}
-                                    <div className="flex items-center gap-6 py-4 border-y border-slate-100 dark:border-slate-800 my-4">
-                                        <div className="flex flex-col">
-                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Views</span>
-                                            <span className="text-lg font-bold text-slate-900 dark:text-white">3,402</span>
-                                        </div>
-                                        <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 pl-6">
-                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Applications</span>
-                                            <span className="text-lg font-bold text-slate-900 dark:text-white">42</span>
-                                        </div>
-                                        <div className="flex flex-col border-l border-slate-100 dark:border-slate-800 pl-6">
-                                            <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Inquiries</span>
-                                            <span className="text-lg font-bold text-slate-900 dark:text-white">12</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex items-center justify-between mt-auto">
-                                        <div className="flex gap-2">
-                                            <button className="bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Edit</button>
-                                            <button className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">List Again</button>
-                                        </div>
-                                        <button className="flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium">
-                                            Manage Tenancy
-                                            <span className="material-symbols-outlined text-lg">arrow_forward</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Listing Card 3: Under Review */}
-                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col lg:flex-row shadow-sm hover:shadow-md transition-shadow">
-                                <div className="relative w-full lg:w-72 h-48 lg:h-auto shrink-0">
-                                    <img
-                                        className="w-full h-full object-cover"
-                                        data-alt="Charming student house exterior"
-                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuA66h-2jUjSDTZCxHreQVQ6mQLTXV4QS5Lq2NoABWKIgEJvZSjmi-3nH14CIbT_u6h33bvK_uGcGJ-zSgPX5DwoYLk6D5XrvquQheyRefWnUN903f2oVev0wDtZQqMTiYBGLt73-vzuAqzVuhG-vYPwpyvbeLCmX0qCoodu9JdLkzrq1BiHa2Yv_hCXPHMATx3QnRNzIjtknXwMv_6cw05-xeuP4_f82EUIfD-nEiuvcsgjQ_8F4JTu5297GS90iBBCv5Yl16X4RPSi"
-                                        alt="Property"
-                                    />
-                                    <div className="absolute top-3 left-3">
-                                        <span className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                                            <span className="size-1.5 bg-amber-500 rounded-full"></span>
-                                            Under Review
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className="p-6 flex-1 flex flex-col">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <div>
-                                            <h3 className="text-xl font-bold mb-1 text-slate-900 dark:text-white">Charming Student En-suite</h3>
-                                            <div className="flex items-center text-slate-500 dark:text-slate-400 text-sm gap-1">
-                                                <span className="material-symbols-outlined text-lg">location_on</span>
-                                                Remera, Kigali
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-xl font-bold text-primary">$350</p>
-                                            <p className="text-xs text-slate-500">per month</p>
-                                        </div>
-                                    </div>
-
-                                    {/* Info Notice */}
-                                    <div className="flex items-center gap-6 py-4 border-y border-slate-100 dark:border-slate-800 my-4 bg-slate-50/50 dark:bg-slate-800/30 rounded-lg px-4">
-                                        <div className="flex items-center gap-2 text-slate-500">
-                                            <span className="material-symbols-outlined text-amber-500">info</span>
-                                            <span className="text-sm">Listing is being verified by the StudentNest team. Usually takes 24-48h.</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="flex items-center justify-between mt-auto">
-                                        <div className="flex gap-2">
-                                            <button className="bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Edit Draft</button>
-                                            <button className="bg-red-50 dark:bg-red-900/20 text-red-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Cancel Submission</button>
-                                        </div>
-                                        <button className="flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium">
-                                            Preview Listing
-                                            <span className="material-symbols-outlined text-lg">visibility</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
+                            <button onClick={() => setSuccessBanner(false)} className="text-emerald-500 hover:text-emerald-700">
+                                <span className="material-symbols-outlined text-lg">close</span>
+                            </button>
                         </div>
+                    )}
+
+                    {/* Summary cards */}
+                    {s && (
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
+                            {[
+                                { label: 'Active', value: s.active, color: 'text-emerald-600' },
+                                { label: 'Under Review', value: s.pending_review, color: 'text-amber-600' },
+                                { label: 'Filled', value: s.filled, color: 'text-blue-600' },
+                                { label: 'Archived', value: s.archived, color: 'text-slate-500' },
+                                { label: 'Drafts', value: s.drafts, color: 'text-slate-400' },
+                            ].map((item) => (
+                                <div key={item.label} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 text-center shadow-sm">
+                                    <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
+                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{item.label}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Tabs */}
+                    <div className="flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto whitespace-nowrap mb-6 gap-1">
+                        {TABS.map((t) => (
+                            <button
+                                key={t.value}
+                                onClick={() => setTab(t.value)}
+                                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                                    tab === t.value
+                                        ? 'bg-primary text-white shadow-sm'
+                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                            >
+                                {t.label}
+                                {t.count !== undefined && t.count > 0 && (
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tab === t.value ? 'bg-white/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                        {t.count}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
                     </div>
+
+                    {/* Content */}
+                    {error && (
+                        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                            <span className="material-symbols-outlined text-red-500">error</span>
+                            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+                        </div>
+                    )}
+
+                    {loading && (
+                        <div className="flex items-center justify-center py-20">
+                            <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+                        </div>
+                    )}
+
+                    {!loading && !error && filtered.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+                            <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600">apartment</span>
+                            <p className="font-semibold text-slate-600 dark:text-slate-400">No listings here yet</p>
+                            {tab === 'all' && (
+                                <Link href="/landlord/listings/add">
+                                    <button className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg font-semibold text-sm shadow-sm hover:bg-primary/90 transition-colors">
+                                        <span className="material-symbols-outlined text-lg">add</span>
+                                        Add Your First Listing
+                                    </button>
+                                </Link>
+                            )}
+                        </div>
+                    )}
+
+                    {!loading && filtered.length > 0 && (
+                        <div className="space-y-5">
+                            {filtered.map((card) => (
+                                <ListingCard key={card.id} card={card} onAction={load} />
+                            ))}
+                        </div>
+                    )}
                 </div>
             </main>
         </div>

@@ -11,8 +11,7 @@ export const metadata: Metadata = {
   keywords: "student housing, university housing, rwanda housing, secure housing",
 };
 
-import Header from "@/components/features/Header";
-import Footer from "@/components/features/Footer";
+import LayoutWrapper from "@/components/features/LayoutWrapper";
 import AuthHashHandler from "@/components/features/AuthHashHandler";
 
 export default function RootLayout({
@@ -33,11 +32,9 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} antialiased bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display`}>
         <AuthHashHandler />
-        <Header />
-        <main>
+        <LayoutWrapper>
           {children}
-        </main>
-        <Footer />
+        </LayoutWrapper>
       </body>
     </html>
   );

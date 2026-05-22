@@ -4,11 +4,86 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getUserProfileAction } from '@/app/actions/nestActions';
+import { getListingDashboardAction } from '@/app/actions/listingsActions';
+import { handleAuthError } from '@/lib/auth-redirect';
+import type { UserProfileResponse, ListingDashboardResponse, ListingDashboardCard, KYCStatus } from '@/lib/types/api.types';
+
+function fmtRwf(n: number | null | undefined) {
+    return n != null ? `RWF ${n.toLocaleString()}` : '—';
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_NEST_API_BASE_URL ?? '';
+function mediaUrl(url: string) { return url.startsWith('http') ? url : `${API_BASE}${url}`; }
+
+function KycBadge({ status }: { status: KYCStatus }) {
+    if (status === 'approved') {
+        return (
+            <div className="hidden md:flex items-center bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-100 dark:border-green-800">
+                <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-sm mr-1.5">verified_user</span>
+                <span className="text-green-700 dark:text-green-400 text-xs font-bold uppercase tracking-tight">Verified Landlord</span>
+            </div>
+        );
+    }
+    if (status === 'pending') {
+        return (
+            <div className="hidden md:flex items-center bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-full border border-amber-100 dark:border-amber-800">
+                <span className="material-symbols-outlined text-amber-500 text-sm mr-1.5">pending</span>
+                <span className="text-amber-700 dark:text-amber-400 text-xs font-bold uppercase tracking-tight">KYC Pending Review</span>
+            </div>
+        );
+    }
+    if (status === 'rejected') {
+        return (
+            <div className="hidden md:flex items-center bg-red-50 dark:bg-red-900/20 px-3 py-1.5 rounded-full border border-red-100 dark:border-red-800">
+                <span className="material-symbols-outlined text-red-500 text-sm mr-1.5">gpp_bad</span>
+                <span className="text-red-700 dark:text-red-400 text-xs font-bold uppercase tracking-tight">Verification Rejected</span>
+            </div>
+        );
+    }
+    return null;
+}
+
+function ActiveListingCard({ card }: { card: ListingDashboardCard }) {
+    return (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+            <div className="h-40 bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
+                {card.cover_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={mediaUrl(card.cover_url)} alt="Listing" className="w-full h-full object-cover" />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                        <span className="material-symbols-outlined text-slate-300 text-5xl">apartment</span>
+                    </div>
+                )}
+                <div className="absolute top-3 left-3 bg-emerald-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">Active</div>
+            </div>
+            <div className="p-5">
+                <h5 className="font-bold text-slate-900 dark:text-white mb-1 truncate">{card.full_address}</h5>
+                <p className="text-xs text-slate-500 flex items-center gap-1 mb-4 truncate">
+                    <span className="material-symbols-outlined text-sm shrink-0">location_on</span>
+                    {card.neighborhood_name ?? card.full_address}
+                </p>
+                <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <div>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rent</p>
+                        <p className="text-sm font-bold text-primary">{fmtRwf(card.monthly_rent_rwf)}/mo</p>
+                    </div>
+                    <div className="text-right">
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Type</p>
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 capitalize">{card.property_type ? card.property_type.replace(/_/g, ' ') : '—'}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function LandlordDashboardPage() {
     const router = useRouter();
-    const [activeNav, setActiveNav] = useState('dashboard');
-    const [kycChecked, setKycChecked] = useState(false);
+    const [profile, setProfile] = useState<UserProfileResponse | null>(null);
+    const [dashboard, setDashboard] = useState<ListingDashboardResponse | null>(null);
+    const [ready, setReady] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
@@ -18,21 +93,26 @@ export default function LandlordDashboardPage() {
             return;
         }
 
-        // Check KYC status — redirect to ID verification if not yet approved
         getUserProfileAction(token).then((result) => {
+            if (result.error) {
+                if (handleAuthError(result.error, router)) return;
+            }
             if (result.data) {
                 const { kyc_status } = result.data;
-                if (kyc_status !== 'approved') {
+                if (kyc_status === 'rejected') {
                     router.replace('/landlord-registration/id-verification');
                     return;
                 }
+                setProfile(result.data);
             }
-            setKycChecked(true);
+            setReady(true);
+
+            // Load dashboard listings in parallel
+            getListingDashboardAction(token).then((dash) => {
+                if (dash.data) setDashboard(dash.data);
+            });
         });
     }, [router]);
-
-    // Don't render the dashboard until we've confirmed KYC is approved
-    if (!kycChecked) return null;
 
     const handleLogout = () => {
         localStorage.removeItem('accessToken');
@@ -41,105 +121,94 @@ export default function LandlordDashboardPage() {
         router.push('/');
     };
 
+    if (!ready) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-background-light dark:bg-slate-950/50">
+                <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+            </div>
+        );
+    }
+
+    const activeListings = dashboard?.active ?? [];
+    const pendingListings = dashboard?.pending_review ?? [];
+    const filledListings = dashboard?.filled ?? [];
+    const archivedListings = dashboard?.archived ?? [];
+    const draftListings = dashboard?.drafts ?? [];
+
+    // Derive counts from the arrays (more reliable than summary field names)
+    const counts = {
+        active: activeListings.length,
+        pending_review: pendingListings.length,
+        filled: filledListings.length,
+        archived: archivedListings.length,
+        drafts: draftListings.length,
+    };
+
+    const firstName = profile?.full_name?.split(' ')[0] ?? 'there';
+
     return (
-        <div className="flex min-h-[calc(100vh-80px)] font-display bg-background-light dark:bg-slate-950/50">
+        <div className="flex min-h-screen font-display bg-background-light dark:bg-slate-950/50">
+
+            {/* Mobile backdrop */}
+            {sidebarOpen && (
+                <div
+                    className="fixed inset-0 z-20 bg-black/40 md:hidden"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar Navigation */}
-            <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-10">
-                <div className="p-6 flex items-center gap-3">
-                    <div className="bg-primary rounded-lg p-1.5 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-white text-2xl">home_work</span>
+            <aside className={`fixed inset-y-0 left-0 z-30 w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col transition-transform duration-300 ease-in-out
+                ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+                <div className="p-6 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-primary rounded-lg p-1.5 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-white text-2xl">home_work</span>
+                        </div>
+                        <div>
+                            <h1 className="text-slate-900 dark:text-white font-bold text-lg leading-none">StudentNest</h1>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Landlord Portal</span>
+                        </div>
                     </div>
-                    <div>
-                        <h1 className="text-slate-900 dark:text-white font-bold text-lg leading-none">StudentNest</h1>
-                        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Landlord Portal</span>
-                    </div>
+                    <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
                 </div>
 
-                <nav className="flex-1 px-4 space-y-1 mt-4">
-                    <button
-                        onClick={() => setActiveNav('dashboard')}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                            activeNav === 'dashboard'
-                                ? 'bg-primary/10 text-primary'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                    >
+                <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+                    <Link href="/landlord" onClick={() => setSidebarOpen(false)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary">
                         <span className="material-symbols-outlined text-[22px]">dashboard</span>
                         <span className="text-sm font-medium">Overview</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveNav('listings')}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                            activeNav === 'listings'
-                                ? 'bg-primary/10 text-primary'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                    >
+                    </Link>
+                    <Link href="/landlord/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                         <span className="material-symbols-outlined text-[22px]">location_city</span>
                         <span className="text-sm font-medium">My Listings</span>
-                    </button>
-                    <Link href="/landlord/applications" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                        <span className="material-symbols-outlined text-[22px]">description</span>
-                        <span className="text-sm font-medium">Applications</span>
-                        <span className="ml-auto bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">12</span>
+                        {counts.active > 0 && (
+                            <span className="ml-auto bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">{counts.active}</span>
+                        )}
                     </Link>
-                    <button
-                        onClick={() => setActiveNav('payments')}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                            activeNav === 'payments'
-                                ? 'bg-primary/10 text-primary'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                    >
-                        <span className="material-symbols-outlined text-[22px]">payments</span>
-                        <span className="text-sm font-medium">Payments</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveNav('reviews')}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                            activeNav === 'reviews'
-                                ? 'bg-primary/10 text-primary'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                    >
-                        <span className="material-symbols-outlined text-[22px]">star</span>
-                        <span className="text-sm font-medium">Reviews</span>
-                    </button>
-
-                    <Link href="/landlord-registration/id-verification" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <Link href="/landlord/notifications" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                        <span className="material-symbols-outlined text-[22px]">notifications</span>
+                        <span className="text-sm font-medium">Notifications</span>
+                    </Link>
+                    <Link href="/landlord-registration/id-verification" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                         <span className="material-symbols-outlined text-[22px]">verified_user</span>
                         <span className="text-sm font-medium">ID Verification</span>
+                        {profile?.kyc_status === 'pending' && (
+                            <span className="ml-auto w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                        )}
                     </Link>
 
                     <div className="pt-4 pb-2">
                         <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Support</p>
                     </div>
-
-                    <button
-                        onClick={() => setActiveNav('settings')}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                            activeNav === 'settings'
-                                ? 'bg-primary/10 text-primary'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                    >
-                        <span className="material-symbols-outlined text-[22px]">settings</span>
-                        <span className="text-sm font-medium">Settings</span>
-                    </button>
-                    <button
-                        onClick={() => setActiveNav('help')}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                            activeNav === 'help'
-                                ? 'bg-primary/10 text-primary'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
-                        }`}
-                    >
+                    <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                         <span className="material-symbols-outlined text-[22px]">help</span>
                         <span className="text-sm font-medium">Help Center</span>
                     </button>
                 </nav>
 
-                <div className="p-4 mt-auto mb-20 md:mb-0 space-y-3">
+                <div className="p-4 mt-auto space-y-3">
                     <Link href="/landlord/listings/add">
                         <button className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white py-2.5 rounded-lg font-semibold text-sm transition-all shadow-sm">
                             <span className="material-symbols-outlined text-sm">add</span>
@@ -157,323 +226,156 @@ export default function LandlordDashboardPage() {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 ml-64 p-8 relative min-w-0">
+            <main className="flex-1 md:ml-64 p-4 md:p-8 relative min-w-0">
                 {/* Top Header */}
                 <header className="flex items-center justify-between mb-8">
-                    <div>
-                        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Landlord Dashboard</h2>
-                        <p className="text-slate-500 text-sm">Welcome back, your properties are performing well.</p>
-                    </div>
-                    <div className="flex items-center gap-6">
-                        <div className="hidden md:flex items-center bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-100 dark:border-green-800">
-                            <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-sm mr-1.5">verified_user</span>
-                            <span className="text-green-700 dark:text-green-400 text-xs font-bold uppercase tracking-tight">Verified Landlord</span>
-                        </div>
-                        <button className="relative p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
-                            <span className="material-symbols-outlined text-2xl">notifications</span>
-                            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setSidebarOpen(true)} className="md:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                            <span className="material-symbols-outlined">menu</span>
                         </button>
-                        <div className="flex items-center gap-3 pl-6 border-l border-slate-200 dark:border-slate-800">
+                        <div>
+                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Landlord Dashboard</h2>
+                            <p className="text-slate-500 text-sm">Welcome back, {firstName}.</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        {profile && <KycBadge status={profile.kyc_status} />}
+                        <Link href="/notifications" className="relative p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+                            <span className="material-symbols-outlined text-2xl">notifications</span>
+                        </Link>
+                        <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-800">
                             <div className="text-right hidden sm:block">
-                                <p className="text-sm font-bold text-slate-900 dark:text-white">Jean-Paul Habimana</p>
-                                <p className="text-[11px] text-slate-500 font-medium">Kigali, RW</p>
+                                <p className="text-sm font-bold text-slate-900 dark:text-white">{profile?.full_name ?? '—'}</p>
+                                <p className="text-[11px] text-slate-500 font-medium capitalize">{profile?.kyc_status === 'approved' ? 'Verified Landlord' : 'Landlord'}</p>
                             </div>
-                            <div
-                                className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 bg-cover bg-center border border-slate-300 dark:border-slate-600"
-                                data-alt="Landlord professional profile picture"
-                                style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuALFGoiy3PDPnCayytSYEBM48N7q4iRMnYQkxw0cF3CRME2d1qPbLxF7x2FNoyy5L1WDsBJsk0KkFCk_J1zk8MyK3A0_KzYjnSV7i86q7LXir0t0vP7A925RsPzxnzo-96NAQibI6EwHCw04JXfOaOqnP82KCPnO3xmo0g_YeP51j7XZK0yarV2EQCP3HQMoh8X0fvgLSIasdjYcT1MwApob77kzuWzU0jo0rmBt8TPlSuUYGz1WIecY5u7U8YTk5NFPjW9TC0wrbhj')" }}>
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                <span className="material-symbols-outlined text-primary text-xl">person</span>
                             </div>
                         </div>
                     </div>
                 </header>
 
-                {/* Trust Indicators Bar */}
-                <div className="mb-8 flex items-center justify-between bg-primary/5 border border-primary/20 p-4 rounded-xl">
-                    <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-primary">security</span>
-                        <div>
-                            <p className="text-sm font-bold text-slate-900 dark:text-white leading-none">Escrow System Active</p>
-                            <p className="text-xs text-slate-500 mt-1">Payments for 3 bookings are securely held and ready for release on move-in.</p>
+                {/* KYC pending banner */}
+                {profile?.kyc_status === 'pending' && (
+                    <div className="mb-8 flex items-center justify-between bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 p-4 rounded-xl">
+                        <div className="flex items-center gap-3">
+                            <span className="material-symbols-outlined text-amber-500">pending</span>
+                            <div>
+                                <p className="text-sm font-bold text-amber-800 dark:text-amber-300 leading-none">KYC verification in progress</p>
+                                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Your identity documents are under review. Listings you create will go live once your account is verified.</p>
+                            </div>
                         </div>
+                        <Link href="/landlord-registration/id-verification" className="text-amber-700 dark:text-amber-400 text-xs font-bold hover:underline shrink-0 ml-4">View Status</Link>
                     </div>
-                    <button className="text-primary text-xs font-bold hover:underline">View Policy</button>
-                </div>
+                )}
 
-                {/* Analytics Cards */}
+                {/* Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
                     <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div className="flex justify-between items-start mb-4">
-                            <span className="material-symbols-outlined p-2 bg-blue-50 dark:bg-blue-900/30 text-primary rounded-lg">account_balance_wallet</span>
-                            <span className="text-green-600 dark:text-green-400 text-xs font-bold flex items-center">+12.5% <span className="material-symbols-outlined text-xs ml-0.5">trending_up</span></span>
-                        </div>
-                        <p className="text-slate-500 text-xs font-medium uppercase tracking-wider mb-1">Total Revenue</p>
-                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">$4,200.00</h3>
-                    </div>
-                    <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                        <div className="flex justify-between items-start mb-4">
                             <span className="material-symbols-outlined p-2 bg-purple-50 dark:bg-purple-900/30 text-purple-600 rounded-lg">apartment</span>
-                            <span className="text-slate-400 text-xs font-bold uppercase">Stable</span>
+                            <span className="text-slate-400 text-xs font-bold uppercase">Listings</span>
                         </div>
                         <p className="text-slate-500 text-xs font-medium uppercase tracking-wider mb-1">Active Listings</p>
-                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">5</h3>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboard ? counts.active : '—'}</h3>
                     </div>
                     <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div className="flex justify-between items-start mb-4">
-                            <span className="material-symbols-outlined p-2 bg-orange-50 dark:bg-orange-900/30 text-orange-600 rounded-lg">assignment_late</span>
-                            <span className="text-green-600 dark:text-green-400 text-xs font-bold flex items-center">+3 New</span>
+                            <span className="material-symbols-outlined p-2 bg-amber-50 dark:bg-amber-900/30 text-amber-500 rounded-lg">rate_review</span>
+                            <span className="text-slate-400 text-xs font-bold uppercase">Listings</span>
                         </div>
-                        <p className="text-slate-500 text-xs font-medium uppercase tracking-wider mb-1">Pending Apps</p>
-                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">12</h3>
+                        <p className="text-slate-500 text-xs font-medium uppercase tracking-wider mb-1">Under Review</p>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboard ? counts.pending_review : '—'}</h3>
                     </div>
                     <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                         <div className="flex justify-between items-start mb-4">
-                            <span className="material-symbols-outlined p-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 rounded-lg">pie_chart</span>
-                            <span className="text-green-600 dark:text-green-400 text-xs font-bold flex items-center">+2%</span>
+                            <span className="material-symbols-outlined p-2 bg-blue-50 dark:bg-blue-900/30 text-primary rounded-lg">inventory_2</span>
+                            <span className="text-slate-400 text-xs font-bold uppercase">Listings</span>
                         </div>
-                        <p className="text-slate-500 text-xs font-medium uppercase tracking-wider mb-1">Occupancy Rate</p>
-                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">94%</h3>
+                        <p className="text-slate-500 text-xs font-medium uppercase tracking-wider mb-1">Filled</p>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboard ? counts.filled : '—'}</h3>
                     </div>
-                </div>
-
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 mb-10">
-                    {/* Earnings Trend Graph */}
-                    <div className="xl:col-span-2 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                        <div className="flex items-center justify-between mb-8">
-                            <div>
-                                <h4 className="text-lg font-bold text-slate-900 dark:text-white">Earnings Trend</h4>
-                                <p className="text-sm text-slate-500">Monthly revenue overview</p>
-                            </div>
-                            <select className="bg-slate-50 dark:bg-slate-800 border-none text-xs font-bold rounded-lg focus:ring-primary h-9 outline-none">
-                                <option>Last 6 Months</option>
-                                <option>Last Year</option>
-                            </select>
-                        </div>
-                        <div className="h-64 flex flex-col justify-end">
-                            <div className="flex items-end gap-3 h-full px-2">
-                                <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-t-lg h-[40%] relative group">
-                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">$1,200</div>
-                                </div>
-                                <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-t-lg h-[55%] relative group">
-                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">$2,100</div>
-                                </div>
-                                <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-t-lg h-[45%] relative group">
-                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">$1,800</div>
-                                </div>
-                                <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-t-lg h-[75%] relative group">
-                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">$3,200</div>
-                                </div>
-                                <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-t-lg h-[85%] relative group">
-                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity">$3,800</div>
-                                </div>
-                                <div className="flex-1 bg-primary rounded-t-lg h-[95%] relative group">
-                                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] py-1 px-2 rounded opacity-100 transition-opacity">$4,200</div>
-                                </div>
-                            </div>
-                            <div className="flex justify-between mt-4 px-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                                <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Recent Activities or Quick Actions */}
                     <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                        <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-6">Action Needed</h4>
-                        <div className="space-y-4">
-                            <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/20">
-                                <span className="material-symbols-outlined text-red-500">priority_high</span>
-                                <div>
-                                    <p className="text-xs font-bold text-red-700 dark:text-red-400">Lease expiring soon</p>
-                                    <p className="text-[11px] text-red-600/80 dark:text-red-400/80 mt-1">Modern Studio unit 4B lease ends in 15 days.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-900/20">
-                                <span className="material-symbols-outlined text-amber-500">rate_review</span>
-                                <div>
-                                    <p className="text-xs font-bold text-amber-700 dark:text-amber-400">New Review</p>
-                                    <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80 mt-1">A student left a 5-star review for the Shared Apartment.</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/20">
-                                <span className="material-symbols-outlined text-primary">chat_bubble</span>
-                                <div>
-                                    <p className="text-xs font-bold text-primary dark:text-blue-400">New Inquiry</p>
-                                    <p className="text-[11px] text-primary/80 dark:text-blue-400/80 mt-1">Divine K. asked about internet speed in CMU apartment.</p>
-                                </div>
-                            </div>
+                        <div className="flex justify-between items-start mb-4">
+                            <span className="material-symbols-outlined p-2 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-lg">edit_note</span>
+                            <span className="text-slate-400 text-xs font-bold uppercase">Listings</span>
                         </div>
-                        <button className="w-full mt-6 py-2 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                            View All Activities
-                        </button>
+                        <p className="text-slate-500 text-xs font-medium uppercase tracking-wider mb-1">Drafts</p>
+                        <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboard ? counts.drafts : '—'}</h3>
                     </div>
                 </div>
 
-                {/* Property Management Section */}
+                {/* Active Listings Section */}
                 <div className="mb-10">
                     <div className="flex items-center justify-between mb-6">
                         <h4 className="text-xl font-bold text-slate-900 dark:text-white">Active Listings</h4>
-                        <button className="text-primary text-sm font-bold flex items-center gap-1">Manage All <span className="material-symbols-outlined text-sm">arrow_forward</span></button>
+                        <Link href="/landlord/listings" className="text-primary text-sm font-bold flex items-center gap-1 hover:underline">
+                            Manage All <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                        </Link>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {/* Property Card 1 */}
-                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                            <div className="h-40 bg-cover bg-center relative" data-alt="Modern studio apartment interior in Kigali" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuCwO6LlmjXLA-NDw43Ff02UtzjeGlJRPBkwt0cPsKsyHKOxOQWJZ4xHKtlwyOCh6e7E-6tkKm49GRiQtRSfcblmlzNa2QPINzo-jJDq7fZGnb40pdmSVF57WKvwMOHCnjbvjjIxx6UTdTpFD0a7TZotlE9tZLl6XDvo793-rSrRZJ1IHakI4YLoBZRNaLnyPsjVO2hKX-_g-w4J7gFtIjzvC0lzBjQg9_n_sBUZi8WioOeAc9JGQr0hLwrTo4ZY63bCFU9Yh8p4x1gZ')" }}>
-                                <div className="absolute top-3 left-3 bg-green-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">Active</div>
-                                <div className="absolute bottom-3 left-3 text-white">
-                                    <div className="flex items-center gap-1">
-                                        <span className="material-symbols-outlined text-sm">star</span>
-                                        <span className="text-xs font-bold">4.9 (24 Reviews)</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-5">
-                                <h5 className="font-bold text-slate-900 dark:text-white mb-1">Modern Studio in Kigali</h5>
-                                <p className="text-xs text-slate-500 flex items-center gap-1 mb-4"><span className="material-symbols-outlined text-sm">location_on</span> Gasabo District, Kigali</p>
-                                <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
-                                    <div>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rent</p>
-                                        <p className="text-sm font-bold text-primary">$450/mo</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Views</p>
-                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">1,240</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
-                        {/* Property Card 2 */}
-                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                            <div className="h-40 bg-cover bg-center relative" data-alt="Shared apartment living room near CMU" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDFQptERstx2kFoVkv9aKJwIvFJmxI0ywqo7tEz_6o-pUWa7RuRh8P2f86atpAeKCi0Q3KZPOeiJURj3rgTZOp-5vUEEyV6ATnUxOXQYsGUgZz6VCG_IwUfcgEnRuiHCtrLdDaDZonTGAlWURqQ501ysz4You53azPcOmVwbhgVlDPJLUXxVwFzyX2K-p2YB8ORnxYDdeuKACX2qM8vQdwUzeV8LQgZ-T6I_qIll7rlzog_7S_tbSPu27CRKUlUFCEzPPtwP1l7puci')" }}>
-                                <div className="absolute top-3 left-3 bg-blue-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">Rented</div>
-                                <div className="absolute bottom-3 left-3 text-white">
-                                    <div className="flex items-center gap-1">
-                                        <span className="material-symbols-outlined text-sm">star</span>
-                                        <span className="text-xs font-bold">4.7 (18 Reviews)</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-5">
-                                <h5 className="font-bold text-slate-900 dark:text-white mb-1">Shared Apartment near CMU</h5>
-                                <p className="text-xs text-slate-500 flex items-center gap-1 mb-4"><span className="material-symbols-outlined text-sm">location_on</span> Bumbogo, Kigali</p>
-                                <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
-                                    <div>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Rent</p>
-                                        <p className="text-sm font-bold text-primary">$280/mo</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Views</p>
-                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">890</p>
-                                    </div>
-                                </div>
-                            </div>
+                    {activeListings.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 border-dashed gap-3">
+                            <span className="material-symbols-outlined text-slate-300 dark:text-slate-600 text-5xl">apartment</span>
+                            <p className="text-slate-500 font-medium text-sm">No active listings yet</p>
+                            <Link href="/landlord/listings/add">
+                                <button className="mt-1 flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all">
+                                    <span className="material-symbols-outlined text-sm">add</span>
+                                    Add Your First Listing
+                                </button>
+                            </Link>
                         </div>
-
-                        {/* Property Card 3 */}
-                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hover:shadow-md transition-shadow opacity-75">
-                            <div className="h-40 bg-cover bg-center relative" data-alt="Exterior of a building under renovation" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDaRUCEoIfOmhwztPXgV0UNx7DAAeLOdQ0ulMNU1gOF3N7ffaKEaA8YvLgMLIwfxWjtkWfS4nMWq-7ePfqHmLtzwOHoJm9ZKm337ysf0agR7XhdwfBg6SlDkldYy3lYJRxGbiuINwxjR7k35ifAFXxmFAGY8SDYY5hWtxIIaxS6LL8wUzytSNK-zZaObDZwfv2BR32XtapNQxUYxgD2ez5jR8-rcUN-opTehq_m3W7O15cpgY4oZZgzDq3B60Nh66Ct6KJs39Z5QJGJ')" }}>
-                                <div className="absolute top-3 left-3 bg-slate-500 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">Under Review</div>
-                            </div>
-                            <div className="p-5">
-                                <h5 className="font-bold text-slate-900 dark:text-white mb-1">Cozy Annex near University of Rwanda</h5>
-                                <p className="text-xs text-slate-500 flex items-center gap-1 mb-4"><span className="material-symbols-outlined text-sm">location_on</span> Huye, Southern Province</p>
-                                <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
-                                    <div>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Proposed Rent</p>
-                                        <p className="text-sm font-bold text-primary">$150/mo</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Verification</p>
-                                        <p className="text-sm font-bold text-orange-500">Pending</p>
-                                    </div>
-                                </div>
-                            </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {activeListings.slice(0, 3).map((card) => (
+                                <ActiveListingCard key={card.id} card={card} />
+                            ))}
                         </div>
-                    </div>
+                    )}
                 </div>
 
-                {/* Recent Applications Table */}
-                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                        <h4 className="text-lg font-bold text-slate-900 dark:text-white">Recent Applications</h4>
-                        <div className="flex gap-2">
-                            <button className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded text-xs font-semibold">Filter</button>
-                            <button className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded text-xs font-semibold">Export</button>
+                {/* Account Details */}
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+                    <h4 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Account Details</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Name</p>
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile?.full_name ?? '—'}</p>
                         </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 dark:bg-slate-800/50">
-                                <tr>
-                                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Student Name</th>
-                                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Property</th>
-                                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Date Applied</th>
-                                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden bg-cover bg-center" data-alt="Student profile photo" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuDcF2tdymmcVFEJUrCIZdxsvGfALsHIbMnLw9zT8N3mU1Kgq3nxnQ7aSpEoxeom9GkG9bbuZ3CVYwOspEp2Iutv00La3fGf29JkRrAXFIt_yG2qm2czwetpESYfWYH5gUo-LeB5nu3KBnAa6JxGn0XEHwF74WJ2_I_yArLQJBdy_UkQHENGU3YSzBRZkhSnpSt6vljDbabgvrHpROHvAliHP1R2pjAoTsgQOoxcQmbX0QN8RIwv3EWV2a4HirkdMRp-h5dwNQokdzPk')" }}></div>
-                                            <div>
-                                                <p className="text-sm font-bold text-slate-900 dark:text-white">Alice Uwase</p>
-                                                <p className="text-[10px] text-slate-500">CMU Africa Student</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Modern Studio Kigali</td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 uppercase">Pending</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500 font-medium">Oct 12, 2023</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button className="text-primary text-xs font-bold hover:underline">View Details</button>
-                                    </td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden bg-cover bg-center" data-alt="Student profile photo" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuB-xbSHnbJ1LV6ri628DkcEBY-ac_YZROEpqHXdaNtfy6eQxEi99ok11pRU0o5odFgqqkaOv3h1xJUBMlTXbdu8RbIaY6oC_MUHiZN9dv7-wmtA7CSXtkG2OECXxQlam489VRIg_KGUR78Qr49yhdFrG0gIbvOPBk-AVbKx3FX27i96inLtE2xj6V0wZtM42sXs8M8r0E3Jccnvs7rAIzffqSL2ZaRkF8VWdNYPJijB5zJF6Ve5vrbYJVl0iWtjRaSR69rSAbyxcgbk')" }}></div>
-                                            <div>
-                                                <p className="text-sm font-bold text-slate-900 dark:text-white">John Kagabo</p>
-                                                <p className="text-[10px] text-slate-500">ALU Student</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Shared Apartment CMU</td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 uppercase">Interviewing</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500 font-medium">Oct 10, 2023</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button className="text-primary text-xs font-bold hover:underline">View Details</button>
-                                    </td>
-                                </tr>
-                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden bg-cover bg-center" data-alt="Student profile photo" style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBN1Us83-o3fscMmeBNrJcDFY8NEcRBflc5-7tQiSzPMQgQA-H8xRrJ2K_Y26Su0H1sWscUV0UcvmWpJunxyjbG2o6MLP3AcEZ9wSCjIhRJa2_RjUKGmhaYOWm0CMTd4jJxegP3DEhfhs81yjNyFyGykICOilHxwmBKbMX0yogkCeSJAts0mgTP8UfsQve7a4JbfQcmP-GmtyV4v7tJPHuI5pVin_f82d3Ye7PJYn1C-v599iVCmBfUwVs4hN-KtMsqc7vtRsEVVdXO')" }}></div>
-                                            <div>
-                                                <p className="text-sm font-bold text-slate-900 dark:text-white">Sarah Smith</p>
-                                                <p className="text-[10px] text-slate-500">Exchange Student</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">Modern Studio Kigali</td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 uppercase">Approved</span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-slate-500 font-medium">Oct 08, 2023</td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button className="text-primary text-xs font-bold hover:underline">View Details</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 text-center">
-                        <button className="text-slate-500 text-xs font-bold hover:text-primary transition-colors">View All Applications</button>
+                        <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile?.phone ?? 'Not provided'}</p>
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">KYC Status</p>
+                            <p className={`text-sm font-bold capitalize ${
+                                profile?.kyc_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' :
+                                profile?.kyc_status === 'rejected' ? 'text-red-600 dark:text-red-400' :
+                                'text-amber-600 dark:text-amber-400'
+                            }`}>
+                                {profile?.kyc_status === 'approved' ? '✓ Verified' :
+                                 profile?.kyc_status === 'pending' ? 'Pending Review' :
+                                 profile?.kyc_status === 'rejected' ? 'Rejected' : '—'}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Account Status</p>
+                            <p className={`text-sm font-bold capitalize ${profile?.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}`}>
+                                {profile?.status ?? '—'}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Member Since</p>
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                {profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '—'}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Last Login</p>
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                                {profile?.last_login_at ? new Date(profile.last_login_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                            </p>
+                        </div>
                     </div>
                 </div>
             </main>
