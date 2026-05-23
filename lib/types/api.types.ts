@@ -315,6 +315,27 @@ export interface ListingModerationQueueItem {
   cover_url?: string | null;
 }
 
+export interface AdminListingDetail {
+  id: string;
+  status: ListingStatus;
+  listing_type: ListingType;
+  full_address?: string | null;
+  neighborhood_name?: string | null;
+  property_type?: PropertyType | null;
+  floor_level?: FloorLevel | null;
+  monthly_rent_rwf?: number | null;
+  security_deposit_rwf?: number | null;
+  utilities?: UtilityType[] | null;
+  lease_durations?: LeaseDuration[] | null;
+  house_rules?: HouseRules | null;
+  calendar?: CalendarEntry[] | null;
+  media: ListingMedia[];
+  owner_name?: string | null;
+  owner_email?: string | null;
+  submitted_at?: string | null;
+  verified_badge?: boolean;
+}
+
 export interface ModerationApproveResponse {
   listing_id: string;
   status: ListingStatus;

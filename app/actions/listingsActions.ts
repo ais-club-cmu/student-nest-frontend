@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 
 import { nestRequest } from '@/lib/api';
 import type {
+  AdminListingDetail,
   CalendarEntry,
   DraftListResponse,
   HouseRules,
@@ -202,6 +203,28 @@ export async function submitDraftAction(accessToken: string, listingId: string) 
   );
   if (result.data) afterListingMutation(listingId);
   return result;
+}
+
+export async function getAdminListingDetailAction(accessToken: string, listingId: string) {
+  // Try the submitted-listing endpoint first, fall back to the draft endpoint
+  const result = await nestRequest<AdminListingDetail>(
+    `/api/v1/listings/${encodeURIComponent(listingId)}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: 'no-store',
+    }
+  );
+  if (result.data || result.error?.status !== 404) return result;
+  // Listing may still be retrievable via the drafts path while pending_review
+  return nestRequest<AdminListingDetail>(
+    `/api/v1/listings/drafts/${encodeURIComponent(listingId)}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: 'no-store',
+    }
+  );
 }
 
 export async function getListingReviewQueueAction(accessToken: string) {

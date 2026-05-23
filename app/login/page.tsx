@@ -48,6 +48,12 @@ export default function LoginPage() {
           router.push('/landlord');
         } else if (result.data.role === 'student') {
           router.push('/listings');
+        } else if (
+          result.data.role === 'moderator' ||
+          result.data.role === 'uni_admin' ||
+          result.data.role === 'super_admin'
+        ) {
+          router.push('/admin');
         } else {
           router.push('/');
         }

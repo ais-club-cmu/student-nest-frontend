@@ -12,8 +12,10 @@ import {
     getListingReviewQueueAction,
     approveListingAction,
     rejectListingAction,
+    getAdminListingDetailAction,
 } from '@/app/actions/listingsActions';
-import type { LandlordKycDetail, PendingKycUser, ListingModerationQueueItem } from '@/lib/types/api.types';
+import { handleAuthError } from '@/lib/auth-redirect';
+import type { AdminListingDetail, LandlordKycDetail, PendingKycUser, ListingModerationQueueItem } from '@/lib/types/api.types';
 
 const SUPABASE_STORAGE_BASE =
     (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://rsroaeikcfuadqapeqqz.supabase.co') + '/storage/v1';
@@ -22,6 +24,9 @@ function toAbsoluteUrl(url: string): string {
     if (url.startsWith('http')) return url;
     return `${SUPABASE_STORAGE_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
 }
+
+const API_BASE = process.env.NEXT_PUBLIC_NEST_API_BASE_URL ?? '';
+function mediaUrl(url: string) { return url.startsWith('http') ? url : `${API_BASE}${url}`; }
 
 /** Maps the API's doc_signed_urls shape into a stable list for the UI */
 function docsFromDetail(detail: LandlordKycDetail) {
@@ -57,17 +62,22 @@ function ReviewModal({
     const [rejectMode, setRejectMode] = useState(false);
     const [reason, setReason] = useState('');
 
+    const modalRouter = useRouter();
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
-        if (!token) return;
+        if (!token) { modalRouter.push('/login'); return; }
         getLandlordKycAction(token, user.user_id).then((result) => {
             setDocsLoading(false);
-            if (result.error) { setDocsError(result.error.message); return; }
+            if (result.error) {
+                if (handleAuthError(result.error, modalRouter)) return;
+                setDocsError(result.error.message);
+                return;
+            }
             const d = result.data ? docsFromDetail(result.data) : [];
             setDocs(d);
             if (d.length > 0) setActiveDoc(d[0]);
         });
-    }, [user.user_id]);
+    }, [user.user_id, modalRouter]);
 
     const initials = user.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
     const submitted = new Date(user.submitted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -245,6 +255,264 @@ function ReviewModal({
     );
 }
 
+// ── Listing detail modal ──────────────────────────────────────────────────────
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function ListingDetailModal({
+    item,
+    onClose,
+    onApprove,
+    onReject,
+    busy,
+}: {
+    item: ListingModerationQueueItem;
+    onClose: () => void;
+    onApprove: () => void;
+    onReject: (reason: string) => void;
+    busy: boolean;
+}) {
+    const [detail, setDetail] = useState<AdminListingDetail | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    const [activePhoto, setActivePhoto] = useState(0);
+    const [rejectMode, setRejectMode] = useState(false);
+    const [reason, setReason] = useState('');
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        getAdminListingDetailAction(token, item.listing_id).then((r) => {
+            setLoading(false);
+            if (r.data) setDetail(r.data);
+            else setFetchError(r.error?.message ?? 'Failed to load listing details');
+        });
+    }, [item.listing_id]);
+
+    const photos = detail?.media ?? [];
+    const sorted = [...photos].sort((a, b) => a.display_order - b.display_order);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+
+                {/* Header */}
+                <div className="flex items-center gap-4 px-6 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+                    <div className="flex-1 min-w-0">
+                        <p className="font-bold text-slate-900 dark:text-white truncate">{item.full_address}</p>
+                        <p className="text-xs text-slate-500">{item.owner_name} · {item.owner_email}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 uppercase shrink-0">Pending Review</span>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors ml-1">
+                        <span className="material-symbols-outlined text-[20px]">close</span>
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto">
+                    {loading && (
+                        <div className="flex items-center justify-center py-24">
+                            <span className="material-symbols-outlined animate-spin text-primary text-4xl">progress_activity</span>
+                        </div>
+                    )}
+
+                    {!loading && fetchError && (
+                        <div className="m-6 flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <span className="material-symbols-outlined text-red-500">error</span>
+                            <p className="text-sm text-red-700 dark:text-red-400">{fetchError}</p>
+                        </div>
+                    )}
+
+                    {!loading && detail && (
+                        <div className="p-6 space-y-6">
+
+                            {/* Photo gallery */}
+                            {sorted.length > 0 ? (
+                                <div className="space-y-3">
+                                    <div className="aspect-video rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                            src={mediaUrl(sorted[activePhoto]?.url ?? '')}
+                                            alt="Listing photo"
+                                            className="w-full h-full object-cover"
+                                        />
+                                    </div>
+                                    {sorted.length > 1 && (
+                                        <div className="flex gap-2 overflow-x-auto pb-1">
+                                            {sorted.map((m, i) => (
+                                                <button
+                                                    key={m.id}
+                                                    onClick={() => setActivePhoto(i)}
+                                                    className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                                                        i === activePhoto ? 'border-primary' : 'border-transparent'
+                                                    }`}
+                                                >
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img src={mediaUrl(m.url)} alt="" className="w-full h-full object-cover" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-10 gap-2 text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                    <span className="material-symbols-outlined text-4xl">photo_library</span>
+                                    <p className="text-sm font-medium">No photos uploaded</p>
+                                </div>
+                            )}
+
+                            {/* Details grid */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                                {/* Identity */}
+                                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2">
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Property</p>
+                                    <Row label="Address" value={detail.full_address} />
+                                    <Row label="Type" value={detail.property_type?.replace(/_/g, ' ')} capitalize />
+                                    <Row label="Floor" value={detail.floor_level?.replace(/_/g, ' ')} capitalize />
+                                    <Row label="Submitted" value={new Date(item.submitted_at).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })} />
+                                </div>
+
+                                {/* Pricing */}
+                                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2">
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Pricing</p>
+                                    <Row label="Monthly Rent" value={detail.monthly_rent_rwf != null ? `RWF ${detail.monthly_rent_rwf.toLocaleString()}` : undefined} />
+                                    <Row label="Security Deposit" value={detail.security_deposit_rwf != null ? `RWF ${detail.security_deposit_rwf.toLocaleString()}` : undefined} />
+                                    {detail.utilities && detail.utilities.length > 0 && (
+                                        <div className="flex items-start gap-2 text-sm">
+                                            <span className="text-slate-500 w-28 shrink-0">Utilities</span>
+                                            <div className="flex flex-wrap gap-1">
+                                                {detail.utilities.map((u) => (
+                                                    <span key={u} className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-semibold rounded-full capitalize">{u}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {detail.lease_durations && detail.lease_durations.length > 0 && (
+                                        <div className="flex items-start gap-2 text-sm">
+                                            <span className="text-slate-500 w-28 shrink-0">Lease</span>
+                                            <div className="flex flex-wrap gap-1">
+                                                {detail.lease_durations.map((d) => (
+                                                    <span key={d} className="px-2 py-0.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-full">{d.replace(/_/g, ' ')}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* House rules */}
+                                {detail.house_rules && (
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4 space-y-2">
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">House Rules</p>
+                                        <Row label="Smoking" value={detail.house_rules.smoking_policy?.replace(/_/g, ' ')} capitalize />
+                                        <Row label="Gender" value={detail.house_rules.gender_preference?.replace(/_/g, ' ')} capitalize />
+                                        <Row label="Visitors" value={detail.house_rules.visitor_policy?.replace(/_/g, ' ')} capitalize />
+                                        <Row label="Pets" value={detail.house_rules.pets_allowed ?? undefined} />
+                                        {detail.house_rules.additional_rules && (
+                                            <div className="text-sm">
+                                                <span className="text-slate-500">Additional</span>
+                                                <p className="text-slate-700 dark:text-slate-300 mt-1 text-xs">{detail.house_rules.additional_rules}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Calendar */}
+                                {detail.calendar && detail.calendar.length > 0 && (
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-4">
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Availability</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {detail.calendar.map((e) => (
+                                                <span key={`${e.year}-${e.month}`} className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                                                    e.status === 'available' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' :
+                                                    e.status === 'occupied'  ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800' :
+                                                    'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                                                }`}>
+                                                    {MONTHS[e.month - 1]} {e.year}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Reject reason */}
+                            {rejectMode && (
+                                <div className="flex flex-col gap-2">
+                                    <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Rejection reason <span className="text-red-500">*</span></label>
+                                    <textarea
+                                        autoFocus
+                                        className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 p-3 text-sm resize-none h-24 focus:ring-2 focus:ring-red-400 outline-none"
+                                        placeholder="e.g. Photos too low quality, address unverifiable..."
+                                        value={reason}
+                                        onChange={(e) => setReason(e.target.value)}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center gap-3 px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 shrink-0">
+                    {!rejectMode ? (
+                        <>
+                            <button
+                                onClick={() => setRejectMode(true)}
+                                disabled={busy || loading || !detail}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold bg-red-50 dark:bg-red-900/20 hover:bg-red-100 text-red-600 dark:text-red-400 transition-colors disabled:opacity-50"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">cancel</span>
+                                Reject
+                            </button>
+                            <button
+                                onClick={onApprove}
+                                disabled={busy || loading || !detail}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+                            >
+                                {busy
+                                    ? <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                                    : <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                                }
+                                {busy ? 'Approving…' : 'Approve'}
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button
+                                onClick={() => { setRejectMode(false); setReason(''); }}
+                                disabled={busy}
+                                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => reason.trim() && onReject(reason.trim())}
+                                disabled={!reason.trim() || busy}
+                                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors disabled:opacity-50"
+                            >
+                                {busy
+                                    ? <span className="material-symbols-outlined animate-spin text-[18px]">progress_activity</span>
+                                    : <span className="material-symbols-outlined text-[18px]">cancel</span>
+                                }
+                                {busy ? 'Rejecting…' : 'Confirm Rejection'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function Row({ label, value, capitalize }: { label: string; value?: string | null; capitalize?: boolean }) {
+    return (
+        <div className="flex items-start gap-2 text-sm">
+            <span className="text-slate-500 w-28 shrink-0">{label}</span>
+            <span className={`text-slate-800 dark:text-slate-200 font-medium ${capitalize ? 'capitalize' : ''}`}>{value || '—'}</span>
+        </div>
+    );
+}
+
 // ── Pending KYC summary card ──────────────────────────────────────────────────
 function KycCard({
     user,
@@ -301,6 +569,7 @@ export default function AdminDashboardPage() {
     const [listingBusyId, setListingBusyId] = useState<string | null>(null);
     const [rejectListingTarget, setRejectListingTarget] = useState<string | null>(null);
     const [rejectReason, setRejectReason] = useState('');
+    const [detailTarget, setDetailTarget] = useState<ListingModerationQueueItem | null>(null);
 
     const showToast = (msg: string, ok: boolean) => {
         setToast({ msg, ok });
@@ -320,7 +589,11 @@ export default function AdminDashboardPage() {
         setKycError(null);
         const result = await getPendingKycAction(token);
         setKycLoading(false);
-        if (result.error) { setKycError(result.error.message); return; }
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            setKycError(result.error.message);
+            return;
+        }
         setPendingKyc(result.data ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -332,7 +605,11 @@ export default function AdminDashboardPage() {
         setListingsError(null);
         const result = await getListingReviewQueueAction(token);
         setListingsLoading(false);
-        if (result.error) { setListingsError(result.error.message); return; }
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            setListingsError(result.error.message);
+            return;
+        }
         setListingQueue(result.data ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -343,22 +620,35 @@ export default function AdminDashboardPage() {
         setListingBusyId(listingId);
         const result = await approveListingAction(token, listingId);
         setListingBusyId(null);
-        if (result.error) { showToast(result.error.message, false); return; }
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            showToast(result.error.message, false);
+            return;
+        }
         showToast('Listing approved.', true);
         setListingQueue((prev) => prev.filter((l) => l.listing_id !== listingId));
     };
 
-    const handleRejectListing = async () => {
+    const rejectListing = async (listingId: string, reason: string) => {
         const token = getToken();
-        if (!token || !rejectListingTarget || !rejectReason.trim()) return;
-        setListingBusyId(rejectListingTarget);
-        const result = await rejectListingAction(token, rejectListingTarget, rejectReason.trim());
+        if (!token || !reason.trim()) return;
+        setListingBusyId(listingId);
+        const result = await rejectListingAction(token, listingId, reason.trim());
         setListingBusyId(null);
         setRejectListingTarget(null);
         setRejectReason('');
-        if (result.error) { showToast(result.error.message, false); return; }
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            showToast(result.error.message, false);
+            return;
+        }
         showToast('Listing rejected.', true);
-        setListingQueue((prev) => prev.filter((l) => l.listing_id !== rejectListingTarget));
+        setListingQueue((prev) => prev.filter((l) => l.listing_id !== listingId));
+    };
+
+    const handleRejectListing = () => {
+        if (!rejectListingTarget || !rejectReason.trim()) return;
+        rejectListing(rejectListingTarget, rejectReason);
     };
 
     useEffect(() => {
@@ -372,7 +662,11 @@ export default function AdminDashboardPage() {
         setBusyId(user.user_id);
         const result = await approveLandlordKycAction(token, user.user_id);
         setBusyId(null);
-        if (result.error) { showToast(result.error.message, false); return; }
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            showToast(result.error.message, false);
+            return;
+        }
         showToast(`${user.full_name} approved.`, true);
         setPendingKyc((prev) => prev.filter((u) => u.user_id !== user.user_id));
     };
@@ -384,7 +678,11 @@ export default function AdminDashboardPage() {
         setBusyId(user.user_id);
         const result = await rejectLandlordKycAction(token, user.user_id, reason);
         setBusyId(null);
-        if (result.error) { showToast(result.error.message, false); return; }
+        if (result.error) {
+            if (handleAuthError(result.error, router)) return;
+            showToast(result.error.message, false);
+            return;
+        }
         showToast(`${user.full_name} rejected.`, true);
         setPendingKyc((prev) => prev.filter((u) => u.user_id !== user.user_id));
     };
@@ -764,7 +1062,7 @@ export default function AdminDashboardPage() {
                                             <div className="w-full sm:w-48 h-36 sm:h-auto shrink-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                                                 {item.cover_url ? (
                                                     // eslint-disable-next-line @next/next/no-img-element
-                                                    <img src={item.cover_url} alt="Listing" className="w-full h-full object-cover" />
+                                                    <img src={mediaUrl(item.cover_url)} alt="Listing" className="w-full h-full object-cover" />
                                                 ) : (
                                                     <span className="material-symbols-outlined text-4xl text-slate-300 dark:text-slate-600">apartment</span>
                                                 )}
@@ -775,10 +1073,10 @@ export default function AdminDashboardPage() {
                                                         <h4 className="font-bold text-slate-900 dark:text-white">{item.full_address}</h4>
                                                         <p className="text-sm text-slate-500 mt-0.5">
                                                             {item.neighborhood_name && <span>{item.neighborhood_name} · </span>}
-                                                            <span className="capitalize">{item.property_type.replace('_', ' ')}</span>
+                                                            <span className="capitalize">{item.property_type?.replace(/_/g, ' ') ?? '—'}</span>
                                                         </p>
                                                     </div>
-                                                    <span className="font-bold text-primary text-sm shrink-0 ml-4">RWF {item.monthly_rent_rwf.toLocaleString()}/mo</span>
+                                                    <span className="font-bold text-primary text-sm shrink-0 ml-4">{item.monthly_rent_rwf != null ? `RWF ${item.monthly_rent_rwf.toLocaleString()}/mo` : '—'}</span>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-500 mb-4">
                                                     <span><span className="font-semibold text-slate-700 dark:text-slate-300">Owner:</span> {item.owner_name}</span>
@@ -813,6 +1111,13 @@ export default function AdminDashboardPage() {
                                                         </>
                                                     ) : (
                                                         <>
+                                                            <button
+                                                                onClick={() => setDetailTarget(item)}
+                                                                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[16px]">visibility</span>
+                                                                Details
+                                                            </button>
                                                             <button
                                                                 onClick={() => setRejectListingTarget(item.listing_id)}
                                                                 disabled={!!listingBusyId}
@@ -896,6 +1201,20 @@ export default function AdminDashboardPage() {
                     )}
                 </div>
             </main>
+
+            {/* Listing detail modal */}
+            {detailTarget && (
+                <ListingDetailModal
+                    item={detailTarget}
+                    busy={listingBusyId === detailTarget.listing_id}
+                    onClose={() => setDetailTarget(null)}
+                    onApprove={() => { handleApproveListing(detailTarget.listing_id); setDetailTarget(null); }}
+                    onReject={(reason) => {
+                        setDetailTarget(null);
+                        rejectListing(detailTarget.listing_id, reason);
+                    }}
+                />
+            )}
 
             {/* Review modal */}
             {reviewTarget && (
