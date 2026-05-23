@@ -555,6 +555,13 @@ function KycCard({
 export default function AdminDashboardPage() {
     const router = useRouter();
     const [tab, setTab] = useState<Tab>('overview');
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        const role = localStorage.getItem('userRole');
+        if (!token) { router.replace('/login'); return; }
+        if (role === 'student' || role === 'landlord') { router.replace('/'); return; }
+    }, [router]);
     const [pendingKyc, setPendingKyc] = useState<PendingKycUser[]>([]);
     const [kycLoading, setKycLoading] = useState(false);
     const [kycError, setKycError] = useState<string | null>(null);
