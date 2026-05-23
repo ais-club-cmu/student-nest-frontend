@@ -44,18 +44,14 @@ export default function LoginPage() {
         localStorage.setItem('userRole', result.data.role);
 
         // Redirect based on role
-        if (result.data.role === 'landlord') {
+        const role = result.data.role;
+        if (role === 'landlord') {
           router.push('/landlord');
-        } else if (result.data.role === 'student') {
+        } else if (role === 'student') {
           router.push('/listings');
-        } else if (
-          result.data.role === 'moderator' ||
-          result.data.role === 'uni_admin' ||
-          result.data.role === 'super_admin'
-        ) {
-          router.push('/admin');
         } else {
-          router.push('/');
+          // moderator, uni_admin, super_admin — any other privileged role
+          router.push('/admin');
         }
       }
     } catch (err) {
