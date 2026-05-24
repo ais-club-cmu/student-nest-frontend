@@ -99,7 +99,7 @@ export default function ProfilePage() {
 
                 {/* Listing portal CTA — students only */}
                 {profile.role === 'student' && (
-                    <Link href="/landlord">
+                    <Link href="/student-portal">
                         <div className="flex items-center gap-4 p-5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-2xl hover:bg-primary/10 dark:hover:bg-primary/20 transition-colors cursor-pointer">
                             <div className="bg-primary rounded-xl p-2.5 shrink-0">
                                 <span className="material-symbols-outlined text-white text-2xl">home_work</span>

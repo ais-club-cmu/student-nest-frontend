@@ -9,7 +9,6 @@ import {
     archiveListingAction,
     deleteDraftListingAction,
 } from '@/app/actions/listingsActions';
-import { getUserProfileAction } from '@/app/actions/nestActions';
 import { handleAuthError } from '@/lib/auth-redirect';
 import type { ListingDashboardCard, ListingDashboardResponse, ListingStatus } from '@/lib/types/api.types';
 
@@ -46,7 +45,6 @@ function ListingCard({ card, onAction }: { card: ListingDashboardCard; onAction:
 
     return (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden flex flex-col lg:flex-row shadow-sm hover:shadow-md transition-shadow">
-            {/* Cover image */}
             <div className="relative w-full lg:w-56 h-44 lg:h-auto shrink-0 bg-slate-100 dark:bg-slate-800">
                 {card.cover_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -67,9 +65,7 @@ function ListingCard({ card, onAction }: { card: ListingDashboardCard; onAction:
             <div className="p-5 flex-1 flex flex-col">
                 <div className="flex items-start justify-between mb-2">
                     <div>
-                        <h3 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">
-                            {card.full_address}
-                        </h3>
+                        <h3 className="font-bold text-slate-900 dark:text-white text-lg leading-tight">{card.full_address}</h3>
                         <p className="text-slate-500 dark:text-slate-400 text-sm flex items-center gap-1 mt-0.5">
                             <span className="material-symbols-outlined text-base">location_on</span>
                             {card.neighborhood_name ?? 'Unknown neighbourhood'}{card.property_type ? <> · <span className="capitalize">{card.property_type.replace(/_/g, ' ')}</span></> : null}
@@ -122,7 +118,7 @@ function ListingCard({ card, onAction }: { card: ListingDashboardCard; onAction:
     );
 }
 
-export default function LandlordListingsPage() {
+export default function StudentPortalListingsPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [dashboard, setDashboard] = useState<ListingDashboardResponse | null>(null);
@@ -130,26 +126,12 @@ export default function LandlordListingsPage() {
     const [error, setError] = useState<string | null>(null);
     const [tab, setTab] = useState<FilterTab>('all');
     const [successBanner, setSuccessBanner] = useState(searchParams.get('submitted') === '1');
-    const [kycPendingReview, setKycPendingReview] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const load = useCallback(async () => {
         const token = localStorage.getItem('accessToken');
         const role = localStorage.getItem('userRole');
-        if (!token || (role !== 'landlord' && role !== 'student')) { router.push('/login'); return; }
-
-        const profileResult = await getUserProfileAction(token);
-        if (profileResult.error) {
-            if (handleAuthError(profileResult.error, router)) return;
-        }
-        if (profileResult.data) {
-            const { kyc_status } = profileResult.data;
-            if (role === 'landlord' && kyc_status === 'rejected') {
-                router.replace('/landlord-registration/id-verification');
-                return;
-            }
-            setKycPendingReview(role === 'landlord' && kyc_status === 'pending');
-        }
+        if (!token || role !== 'student') { router.push('/login'); return; }
 
         setLoading(true);
         const result = await getListingDashboardAction(token);
@@ -165,13 +147,7 @@ export default function LandlordListingsPage() {
     useEffect(() => { load(); }, [load]);
 
     const allCards = dashboard
-        ? [
-            ...dashboard.active,
-            ...dashboard.pending_review,
-            ...dashboard.filled,
-            ...dashboard.archived,
-            ...dashboard.drafts,
-          ]
+        ? [...dashboard.active, ...dashboard.pending_review, ...dashboard.filled, ...dashboard.archived, ...dashboard.drafts]
         : [];
 
     const filtered = tab === 'all' ? allCards : allCards.filter((c) => c.status === tab);
@@ -189,12 +165,8 @@ export default function LandlordListingsPage() {
     return (
         <div className="flex min-h-screen font-display bg-background-light dark:bg-slate-950/50">
 
-            {/* Mobile backdrop */}
             {sidebarOpen && (
-                <div
-                    className="fixed inset-0 z-20 bg-black/40 md:hidden"
-                    onClick={() => setSidebarOpen(false)}
-                />
+                <div className="fixed inset-0 z-20 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)} />
             )}
 
             {/* Sidebar */}
@@ -215,17 +187,21 @@ export default function LandlordListingsPage() {
                     </button>
                 </div>
                 <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
-                    <Link href="/landlord" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                    <Link href="/student-portal" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                         <span className="material-symbols-outlined">dashboard</span>
                         <span className="text-sm font-medium">Overview</span>
                     </Link>
-                    <Link href="/landlord/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 bg-primary/10 text-primary rounded-lg">
+                    <Link href="/student-portal/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 bg-primary/10 text-primary rounded-lg">
                         <span className="material-symbols-outlined">list_alt</span>
                         <span className="text-sm font-medium">My Listings</span>
                     </Link>
-                    <Link href="/landlord/notifications" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                    <Link href="/student-portal/notifications" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                         <span className="material-symbols-outlined">notifications</span>
                         <span className="text-sm font-medium">Notifications</span>
+                    </Link>
+                    <Link href="/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                        <span className="material-symbols-outlined">search</span>
+                        <span className="text-sm font-medium">Browse Listings</span>
                     </Link>
                     <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
                         <button onClick={() => { localStorage.clear(); router.push('/'); }} className="flex items-center gap-3 px-3 py-2.5 w-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
@@ -268,16 +244,6 @@ export default function LandlordListingsPage() {
 
                 <div className="p-8 max-w-5xl mx-auto w-full">
 
-                    {kycPendingReview && (
-                        <div className="flex items-center gap-3 mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
-                            <span className="material-symbols-outlined text-amber-500 shrink-0">pending</span>
-                            <div>
-                                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">KYC verification in progress</p>
-                                <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">Your identity documents are under review. You can prepare your listings now — they&apos;ll be submitted once your account is verified.</p>
-                            </div>
-                        </div>
-                    )}
-
                     {successBanner && (
                         <div className="flex items-center justify-between mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
                             <div className="flex items-center gap-3">
@@ -290,53 +256,34 @@ export default function LandlordListingsPage() {
                         </div>
                     )}
 
-                    {/* Summary cards */}
-                    {s && (
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
-                            {[
-                                { label: 'Active', value: s.active, color: 'text-emerald-600' },
-                                { label: 'Under Review', value: s.pending_review, color: 'text-amber-600' },
-                                { label: 'Filled', value: s.filled, color: 'text-blue-600' },
-                                { label: 'Archived', value: s.archived, color: 'text-slate-500' },
-                                { label: 'Drafts', value: s.drafts, color: 'text-slate-400' },
-                            ].map((item) => (
-                                <div key={item.label} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 text-center shadow-sm">
-                                    <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
-                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{item.label}</p>
-                                </div>
-                            ))}
+                    {error && (
+                        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl mb-6">
+                            <span className="material-symbols-outlined text-red-500">error</span>
+                            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
                         </div>
                     )}
 
-                    {/* Tabs */}
-                    <div className="flex bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-x-auto whitespace-nowrap mb-6 gap-1">
-                        {TABS.map((t) => (
+                    {/* Filter tabs */}
+                    <div className="flex gap-2 overflow-x-auto pb-1 mb-6 scrollbar-hide">
+                        {TABS.map(({ value, label, count }) => (
                             <button
-                                key={t.value}
-                                onClick={() => setTab(t.value)}
-                                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                                    tab === t.value
-                                        ? 'bg-primary text-white shadow-sm'
-                                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                key={value}
+                                onClick={() => setTab(value)}
+                                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors ${
+                                    tab === value
+                                        ? 'bg-primary text-white'
+                                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
                                 }`}
                             >
-                                {t.label}
-                                {t.count !== undefined && t.count > 0 && (
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tab === t.value ? 'bg-white/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                                        {t.count}
+                                {label}
+                                {count != null && count > 0 && (
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tab === value ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                                        {count}
                                     </span>
                                 )}
                             </button>
                         ))}
                     </div>
-
-                    {/* Content */}
-                    {error && (
-                        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
-                            <span className="material-symbols-outlined text-red-500">error</span>
-                            <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-                        </div>
-                    )}
 
                     {loading && (
                         <div className="flex items-center justify-center py-20">
@@ -344,23 +291,31 @@ export default function LandlordListingsPage() {
                         </div>
                     )}
 
-                    {!loading && !error && filtered.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-                            <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600">apartment</span>
-                            <p className="font-semibold text-slate-600 dark:text-slate-400">No listings here yet</p>
-                            {tab === 'all' && (
-                                <Link href="/add-listing">
-                                    <button className="flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg font-semibold text-sm shadow-sm hover:bg-primary/90 transition-colors">
-                                        <span className="material-symbols-outlined text-lg">add</span>
-                                        Add Your First Listing
-                                    </button>
-                                </Link>
-                            )}
+                    {!loading && allCards.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+                            <span className="material-symbols-outlined text-6xl text-slate-300 dark:text-slate-600">apartment</span>
+                            <div>
+                                <p className="font-bold text-slate-600 dark:text-slate-400 text-lg">No listings yet</p>
+                                <p className="text-sm text-slate-400 mt-1">Create your first listing to get started.</p>
+                            </div>
+                            <Link href="/add-listing">
+                                <button className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition-all shadow-sm">
+                                    <span className="material-symbols-outlined text-sm">add</span>
+                                    Add Your First Listing
+                                </button>
+                            </Link>
+                        </div>
+                    )}
+
+                    {!loading && allCards.length > 0 && filtered.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                            <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600">filter_list_off</span>
+                            <p className="text-sm text-slate-500">No listings in this category.</p>
                         </div>
                     )}
 
                     {!loading && filtered.length > 0 && (
-                        <div className="space-y-5">
+                        <div className="space-y-4">
                             {filtered.map((card) => (
                                 <ListingCard key={card.id} card={card} onAction={load} />
                             ))}

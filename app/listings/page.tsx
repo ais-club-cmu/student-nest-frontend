@@ -86,7 +86,8 @@ export default function ListingsPage() {
         <div className="flex min-h-[calc(100vh-80px)] bg-background-light dark:bg-slate-950/50">
             <main className="flex-1 flex flex-col min-w-0">
                 {/* Header bar */}
-                <div className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 md:px-10 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sticky top-16 z-10">
+                <div className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-16 z-10">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         <h1 className="text-xl font-bold text-slate-900 dark:text-white">Browse Listings</h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">Find your perfect student accommodation</p>
@@ -104,7 +105,7 @@ export default function ListingsPage() {
                         </div>
                         {role === 'student' && (
                             <Link
-                                href="/landlord/listings/add"
+                                href="/add-listing"
                                 className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm shrink-0"
                             >
                                 <span className="material-symbols-outlined text-lg">add</span>
@@ -112,6 +113,7 @@ export default function ListingsPage() {
                             </Link>
                         )}
                     </div>
+                </div>
                 </div>
 
                 <div className="p-6 md:p-10 max-w-7xl mx-auto w-full flex flex-col gap-6">

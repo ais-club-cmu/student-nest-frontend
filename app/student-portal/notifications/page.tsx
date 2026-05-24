@@ -7,7 +7,7 @@ import { getNotificationsAction, markNotificationReadAction } from '@/app/action
 import { handleAuthError } from '@/lib/auth-redirect';
 import type { NotificationResponse } from '@/lib/types/api.types';
 
-export default function LandlordNotificationsPage() {
+export default function StudentPortalNotificationsPage() {
     const router = useRouter();
     const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
     const [loading, setLoading] = useState(true);
@@ -17,7 +17,8 @@ export default function LandlordNotificationsPage() {
 
     const load = useCallback(async () => {
         const token = localStorage.getItem('accessToken');
-        if (!token) { router.push('/login'); return; }
+        const role = localStorage.getItem('userRole');
+        if (!token || role !== 'student') { router.push('/login'); return; }
         setLoading(true);
         const result = await getNotificationsAction(token);
         setLoading(false);
@@ -50,12 +51,8 @@ export default function LandlordNotificationsPage() {
     return (
         <div className="flex min-h-screen font-display bg-background-light dark:bg-slate-950/50">
 
-            {/* Mobile backdrop */}
             {sidebarOpen && (
-                <div
-                    className="fixed inset-0 z-20 bg-black/40 md:hidden"
-                    onClick={() => setSidebarOpen(false)}
-                />
+                <div className="fixed inset-0 z-20 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)} />
             )}
 
             {/* Sidebar */}
@@ -76,20 +73,24 @@ export default function LandlordNotificationsPage() {
                     </button>
                 </div>
                 <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
-                    <Link href="/landlord" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                    <Link href="/student-portal" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                         <span className="material-symbols-outlined">dashboard</span>
                         <span className="text-sm font-medium">Overview</span>
                     </Link>
-                    <Link href="/landlord/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                    <Link href="/student-portal/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                         <span className="material-symbols-outlined">list_alt</span>
                         <span className="text-sm font-medium">My Listings</span>
                     </Link>
-                    <Link href="/landlord/notifications" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 bg-primary/10 text-primary rounded-lg">
+                    <Link href="/student-portal/notifications" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 bg-primary/10 text-primary rounded-lg">
                         <span className="material-symbols-outlined">notifications</span>
                         <span className="text-sm font-medium">Notifications</span>
                         {unreadCount > 0 && (
                             <span className="ml-auto bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadCount}</span>
                         )}
+                    </Link>
+                    <Link href="/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                        <span className="material-symbols-outlined">search</span>
+                        <span className="text-sm font-medium">Browse Listings</span>
                     </Link>
                     <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
                         <button onClick={() => { localStorage.clear(); router.push('/'); }} className="flex items-center gap-3 px-3 py-2.5 w-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
@@ -168,24 +169,19 @@ export default function LandlordNotificationsPage() {
                                             : 'bg-primary/5 border-primary/20 dark:bg-primary/10'
                                     }`}
                                 >
-                                    <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                                        n.is_read ? 'bg-slate-100 dark:bg-slate-800' : 'bg-primary/10'
-                                    }`}>
+                                    <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${n.is_read ? 'bg-slate-100 dark:bg-slate-800' : 'bg-primary/10'}`}>
                                         <span className={`material-symbols-outlined text-xl ${n.is_read ? 'text-slate-400' : 'text-primary'}`}>
                                             {n.entity_type === 'listing' ? 'apartment' :
-                                             n.entity_type === 'kyc' ? 'verified_user' :
                                              n.entity_type === 'payment' ? 'payments' :
                                              'notifications'}
                                         </span>
                                     </div>
-
                                     <div className="flex-1 min-w-0">
                                         <p className={`font-semibold text-sm ${n.is_read ? 'text-slate-700 dark:text-slate-300' : 'text-slate-900 dark:text-white'}`}>
                                             {n.title}
                                         </p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{n.body}</p>
                                     </div>
-
                                     <div className="flex flex-col items-end gap-2 shrink-0">
                                         {!n.is_read && (
                                             <>
