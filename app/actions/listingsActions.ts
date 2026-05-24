@@ -5,6 +5,8 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { nestRequest } from '@/lib/api';
 import type {
   AdminListingDetail,
+  ApplicationResponse,
+  ApplicationSummary,
   CalendarEntry,
   DraftListResponse,
   HouseRules,
@@ -205,10 +207,17 @@ export async function submitDraftAction(accessToken: string, listingId: string) 
   return result;
 }
 
+export async function getPublicListingDetailAction(listingId: string) {
+  return nestRequest<PublicListing>(`/api/v1/listings/${encodeURIComponent(listingId)}`, {
+    method: 'GET',
+    next: { revalidate: 60, tags: ['listings'] },
+  });
+}
+
 export async function getAdminListingDetailAction(accessToken: string, listingId: string) {
-  // Try the submitted-listing endpoint first, fall back to the draft endpoint
+  // Try the admin endpoint first (returns owner info), fall back to draft for pending_review items
   const result = await nestRequest<AdminListingDetail>(
-    `/api/v1/listings/${encodeURIComponent(listingId)}`,
+    `/api/v1/listings/admin/${encodeURIComponent(listingId)}`,
     {
       method: 'GET',
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -216,9 +225,35 @@ export async function getAdminListingDetailAction(accessToken: string, listingId
     }
   );
   if (result.data || result.error?.status !== 404) return result;
-  // Listing may still be retrievable via the drafts path while pending_review
   return nestRequest<AdminListingDetail>(
     `/api/v1/listings/drafts/${encodeURIComponent(listingId)}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: 'no-store',
+    }
+  );
+}
+
+export async function applyToListingAction(
+  accessToken: string,
+  listingId: string,
+  message?: string
+) {
+  return nestRequest<ApplicationResponse>(
+    `/api/v1/listings/${encodeURIComponent(listingId)}/apply`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ message: message ?? '' }),
+      cache: 'no-store',
+    }
+  );
+}
+
+export async function getListingApplicationsAction(accessToken: string, listingId: string) {
+  return nestRequest<ApplicationSummary[]>(
+    `/api/v1/listings/${encodeURIComponent(listingId)}/applications`,
     {
       method: 'GET',
       headers: { Authorization: `Bearer ${accessToken}` },

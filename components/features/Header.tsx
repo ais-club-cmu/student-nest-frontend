@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { logoutAction } from '@/app/actions/nestActions';
+import { getNotificationsAction } from '@/app/actions/listingsActions';
 
 const STATIC_NAV_LINKS = [
     { label: 'Browse Listings', href: '/listings' },
@@ -20,6 +21,7 @@ export default function Header() {
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);       // avatar dropdown
     const [drawerOpen, setDrawerOpen] = useState(false);   // mobile nav drawer
+    const [unreadNotifs, setUnreadNotifs] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -28,6 +30,24 @@ export default function Header() {
         setIsLoggedIn(!!token);
         setUserRole(role);
     }, [pathname]);
+
+    // Poll unread notification count for students and landlords
+    const fetchUnreadCount = useCallback(async () => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        const result = await getNotificationsAction(token);
+        if (result.data) setUnreadNotifs(result.data.filter((n) => !n.is_read).length);
+    }, []);
+
+    useEffect(() => {
+        if (!isLoggedIn || (userRole !== 'student' && userRole !== 'landlord')) {
+            setUnreadNotifs(0);
+            return;
+        }
+        fetchUnreadCount();
+        const interval = setInterval(fetchUnreadCount, 30000);
+        return () => clearInterval(interval);
+    }, [isLoggedIn, userRole, fetchUnreadCount]);
 
     // Close avatar dropdown when clicking outside
     useEffect(() => {
@@ -107,6 +127,31 @@ export default function Header() {
 
                         {/* Right side */}
                         <div className="flex items-center gap-2">
+                            {/* Quick-access icons for logged-in students / landlords */}
+                            {isLoggedIn && (userRole === 'student' || userRole === 'landlord') && (
+                                <>
+                                    <Link
+                                        href={userRole === 'student' ? '/student-portal/conversations' : '/landlord/conversations'}
+                                        className="flex items-center justify-center w-9 h-9 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        aria-label="Messages"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">forum</span>
+                                    </Link>
+                                    <Link
+                                        href={userRole === 'student' ? '/student-portal/notifications' : '/landlord/notifications'}
+                                        className="relative flex items-center justify-center w-9 h-9 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        aria-label="Notifications"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">notifications</span>
+                                        {unreadNotifs > 0 && (
+                                            <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                                                {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                                            </span>
+                                        )}
+                                    </Link>
+                                </>
+                            )}
+
                             {!isLoggedIn ? (
                                 <>
                                     <Link href="/login" className="hidden sm:block">
@@ -240,14 +285,39 @@ export default function Header() {
                                 Profile
                             </Link>
                             {(userRole === 'student' || userRole === 'landlord') && (
-                                <Link
-                                    href={userRole === 'student' ? '/student-portal/listings' : '/landlord/listings'}
-                                    onClick={() => setDrawerOpen(false)}
-                                    className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                                >
-                                    <span className="material-symbols-outlined text-[18px] text-slate-500">apartment</span>
-                                    My Listings
-                                </Link>
+                                <>
+                                    <Link
+                                        href={userRole === 'student' ? '/student-portal/listings' : '/landlord/listings'}
+                                        onClick={() => setDrawerOpen(false)}
+                                        className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px] text-slate-500">apartment</span>
+                                        My Listings
+                                    </Link>
+                                    <Link
+                                        href={userRole === 'student' ? '/student-portal/conversations' : '/landlord/conversations'}
+                                        onClick={() => setDrawerOpen(false)}
+                                        className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px] text-slate-500">forum</span>
+                                        Messages
+                                    </Link>
+                                    <Link
+                                        href={userRole === 'student' ? '/student-portal/notifications' : '/landlord/notifications'}
+                                        onClick={() => setDrawerOpen(false)}
+                                        className="flex items-center justify-between px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <span className="material-symbols-outlined text-[18px] text-slate-500">notifications</span>
+                                            Notifications
+                                        </div>
+                                        {unreadNotifs > 0 && (
+                                            <span className="bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
+                                                {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                                            </span>
+                                        )}
+                                    </Link>
+                                </>
                             )}
                         </>
                     )}

@@ -409,6 +409,71 @@ export interface PublicListing {
   verified_badge?: boolean;
 }
 
+// ── Applications ──────────────────────────────────────────────────────────────
+
+export type ApplicationStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+
+export interface ApplicationResponse {
+  application_id: string;
+  listing_id: string;
+  status: ApplicationStatus;
+  message: string;
+}
+
+export interface ApplicationSummary {
+  application_id: string;
+  applicant_name: string;
+  status: ApplicationStatus;
+  message?: string | null;
+  created_at: string;
+}
+
+export interface ApplicationDetail {
+  application_id: string;
+  listing_id: string;
+  applicant_name: string;
+  applicant_email: string;
+  program?: string | null;
+  home_country?: string | null;
+  message?: string | null;
+  status: ApplicationStatus;
+  created_at: string;
+}
+
+// ── Conversations ─────────────────────────────────────────────────────────────
+
+export interface ConversationSummary {
+  id: string;
+  listing_id: string;
+  listing_address: string | null;
+  application_id: string | null;
+  landlord_user_id: string;
+  landlord_name: string;
+  student_user_id: string;
+  student_name: string;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+  created_at: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_user_id: string;
+  sender_name: string;
+  body: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface SendMessageResponse {
+  id: string;
+  conversation_id: string;
+  sender_user_id: string;
+  body: string;
+  created_at: string;
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export interface NotificationResponse {

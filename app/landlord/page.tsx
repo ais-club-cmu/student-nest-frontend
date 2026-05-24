@@ -182,6 +182,10 @@ export default function LandlordDashboardPage() {
                         <span className="material-symbols-outlined text-[22px]">notifications</span>
                         <span className="text-sm font-medium">Notifications</span>
                     </Link>
+                    <Link href="/landlord/conversations" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                        <span className="material-symbols-outlined text-[22px]">forum</span>
+                        <span className="text-sm font-medium">Messages</span>
+                    </Link>
                     {profile?.role === 'landlord' && (
                         <Link href="/landlord-registration/id-verification" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                             <span className="material-symbols-outlined text-[22px]">verified_user</span>
@@ -301,6 +305,109 @@ export default function LandlordDashboardPage() {
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{dashboard ? counts.drafts : '—'}</h3>
                     </div>
                 </div>
+
+                {/* Insights */}
+                {dashboard && (() => {
+                    const allCards = [...activeListings, ...pendingListings, ...filledListings, ...archivedListings, ...draftListings];
+                    const totalListings = allCards.length;
+                    const withRent = activeListings.filter((l) => l.monthly_rent_rwf != null);
+                    const totalMonthly = withRent.reduce((s, l) => s + (l.monthly_rent_rwf ?? 0), 0);
+                    const avgRent = withRent.length > 0 ? Math.round(totalMonthly / withRent.length) : null;
+                    const occupancyPct = totalListings > 0 ? Math.round(((counts.active + counts.filled) / totalListings) * 100) : 0;
+
+                    const TYPE_LABELS: Record<string, string> = {
+                        single_room: 'Single Room',
+                        shared_room: 'Shared Room',
+                        self_contained_studio: 'Studio',
+                        full_apartment: 'Full Apartment',
+                    };
+                    const typeCounts = allCards.reduce((acc, l) => {
+                        if (l.property_type) acc[l.property_type] = (acc[l.property_type] ?? 0) + 1;
+                        return acc;
+                    }, {} as Record<string, number>);
+                    const typeEntries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+
+                    return (
+                        <div className="mb-10 space-y-4">
+                            <h4 className="text-lg font-bold text-slate-900 dark:text-white">Portfolio Insights</h4>
+
+                            {/* Quick stat row */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {[
+                                    { label: 'Total Listings', value: totalListings, icon: 'layers', color: 'text-primary bg-primary/10' },
+                                    { label: 'Monthly Revenue', value: totalMonthly > 0 ? `RWF ${totalMonthly.toLocaleString()}` : '—', icon: 'payments', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' },
+                                    { label: 'Avg Rent / Listing', value: avgRent != null ? `RWF ${avgRent.toLocaleString()}` : '—', icon: 'trending_up', color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' },
+                                    { label: 'Occupancy Rate', value: `${occupancyPct}%`, icon: 'percent', color: 'text-violet-600 bg-violet-50 dark:bg-violet-900/20' },
+                                ].map(({ label, value, icon, color }) => (
+                                    <div key={label} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm">
+                                        <div className={`inline-flex p-2 rounded-lg ${color} mb-3`}>
+                                            <span className="material-symbols-outlined text-[18px]">{icon}</span>
+                                        </div>
+                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                                        <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{value}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Status breakdown + property type side by side */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Listing status bar */}
+                                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                                    <h5 className="font-bold text-slate-900 dark:text-white mb-4 text-sm">Listing Status Breakdown</h5>
+                                    <div className="space-y-3">
+                                        {[
+                                            { label: 'Active', count: counts.active, color: 'bg-emerald-500' },
+                                            { label: 'Under Review', count: counts.pending_review, color: 'bg-amber-400' },
+                                            { label: 'Filled', count: counts.filled, color: 'bg-primary' },
+                                            { label: 'Drafts', count: counts.drafts, color: 'bg-slate-300 dark:bg-slate-600' },
+                                            { label: 'Archived', count: counts.archived, color: 'bg-slate-200 dark:bg-slate-700' },
+                                        ].filter((s) => s.count > 0).map(({ label, count, color }) => {
+                                            const pct = totalListings > 0 ? Math.round((count / totalListings) * 100) : 0;
+                                            return (
+                                                <div key={label}>
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{label}</span>
+                                                        <span className="text-xs font-bold text-slate-500">{count} ({pct}%)</span>
+                                                    </div>
+                                                    <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                        <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Property type mix */}
+                                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                                    <h5 className="font-bold text-slate-900 dark:text-white mb-4 text-sm">Property Type Mix</h5>
+                                    {typeEntries.length === 0 ? (
+                                        <p className="text-sm text-slate-400">No listings yet.</p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {typeEntries.map(([type, count]) => {
+                                                const pct = totalListings > 0 ? Math.round((count / totalListings) * 100) : 0;
+                                                return (
+                                                    <div key={type}>
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="text-xs font-medium text-slate-600 dark:text-slate-300 capitalize">
+                                                                {TYPE_LABELS[type] ?? type.replace(/_/g, ' ')}
+                                                            </span>
+                                                            <span className="text-xs font-bold text-slate-500">{count} ({pct}%)</span>
+                                                        </div>
+                                                        <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {/* Active Listings Section */}
                 <div className="mb-10">

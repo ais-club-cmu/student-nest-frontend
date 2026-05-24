@@ -91,6 +91,10 @@ export default function LandlordNotificationsPage() {
                             <span className="ml-auto bg-primary text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadCount}</span>
                         )}
                     </Link>
+                    <Link href="/landlord/conversations" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+                        <span className="material-symbols-outlined">forum</span>
+                        <span className="text-sm font-medium">Messages</span>
+                    </Link>
                     <div className="pt-4 mt-4 border-t border-slate-200 dark:border-slate-800">
                         <button onClick={() => { localStorage.clear(); router.push('/'); }} className="flex items-center gap-3 px-3 py-2.5 w-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
                             <span className="material-symbols-outlined">logout</span>
