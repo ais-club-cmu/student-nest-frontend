@@ -1,21 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     getPendingKycAction,
     getLandlordKycAction,
     approveLandlordKycAction,
     rejectLandlordKycAction,
+    getUserProfileAction,
 } from '@/app/actions/nestActions';
 import {
     getListingReviewQueueAction,
     approveListingAction,
     rejectListingAction,
     getAdminListingDetailAction,
+    getPublicListingsAction,
 } from '@/app/actions/listingsActions';
 import { handleAuthError } from '@/lib/auth-redirect';
-import type { AdminListingDetail, LandlordKycDetail, PendingKycUser, ListingModerationQueueItem } from '@/lib/types/api.types';
+import type { AdminListingDetail, LandlordKycDetail, PendingKycUser, ListingModerationQueueItem, PublicListing, UserProfileResponse } from '@/lib/types/api.types';
 
 const SUPABASE_STORAGE_BASE =
     (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://rsroaeikcfuadqapeqqz.supabase.co') + '/storage/v1';
@@ -38,7 +40,7 @@ function docsFromDetail(detail: LandlordKycDetail) {
     }));
 }
 
-type Tab = 'overview' | 'landlord-approvals' | 'student-verifications' | 'listing-reviews';
+type Tab = 'overview' | 'landlord-approvals' | 'listing-reviews';
 
 // ── Review modal (fetches docs, approve / reject) ─────────────────────────────
 function ReviewModal({
@@ -555,13 +557,25 @@ function KycCard({
 export default function AdminDashboardPage() {
     const router = useRouter();
     const [tab, setTab] = useState<Tab>('overview');
+    const [adminProfile, setAdminProfile] = useState<UserProfileResponse | null>(null);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         const role = localStorage.getItem('userRole');
         if (!token) { router.replace('/login'); return; }
         if (role === 'student' || role === 'landlord') { router.replace('/'); return; }
+        getUserProfileAction(token).then((r) => { if (r.data) setAdminProfile(r.data); });
     }, [router]);
+
+    useEffect(() => {
+        function handleClickOutside(e: MouseEvent) {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
     const [pendingKyc, setPendingKyc] = useState<PendingKycUser[]>([]);
     const [kycLoading, setKycLoading] = useState(false);
     const [kycError, setKycError] = useState<string | null>(null);
@@ -577,6 +591,16 @@ export default function AdminDashboardPage() {
     const [rejectListingTarget, setRejectListingTarget] = useState<string | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [detailTarget, setDetailTarget] = useState<ListingModerationQueueItem | null>(null);
+    const [activeListingsCount, setActiveListingsCount] = useState<number | null>(null);
+    const [activeListingsData, setActiveListingsData] = useState<PublicListing[]>([]);
+    const [overviewLoading, setOverviewLoading] = useState(false);
+
+    const handleLogout = () => {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('userRole');
+        router.push('/');
+    };
 
     const showToast = (msg: string, ok: boolean) => {
         setToast({ msg, ok });
@@ -621,6 +645,26 @@ export default function AdminDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const loadOverview = useCallback(async () => {
+        const token = getToken();
+        if (!token) return;
+        setOverviewLoading(true);
+        const [kycResult, queueResult, listingsResult] = await Promise.all([
+            getPendingKycAction(token),
+            getListingReviewQueueAction(token),
+            getPublicListingsAction(),
+        ]);
+        setOverviewLoading(false);
+        if (kycResult.data) setPendingKyc(kycResult.data);
+        if (queueResult.data) setListingQueue(queueResult.data);
+        if (listingsResult.data) {
+            const active = listingsResult.data.filter((l) => l.status === 'active');
+            setActiveListingsCount(active.length);
+            setActiveListingsData(active);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleApproveListing = async (listingId: string) => {
         const token = getToken();
         if (!token) return;
@@ -659,9 +703,10 @@ export default function AdminDashboardPage() {
     };
 
     useEffect(() => {
+        if (tab === 'overview') loadOverview();
         if (tab === 'landlord-approvals') loadPendingKyc();
         if (tab === 'listing-reviews') loadListingQueue();
-    }, [tab, loadPendingKyc, loadListingQueue]);
+    }, [tab, loadOverview, loadPendingKyc, loadListingQueue]);
 
     const handleApprove = async (user: PendingKycUser) => {
         const token = getToken();
@@ -696,7 +741,6 @@ export default function AdminDashboardPage() {
 
     const NAV: { id: Tab; label: string; icon: string }[] = [
         { id: 'overview', label: 'Overview', icon: 'dashboard' },
-        { id: 'student-verifications', label: 'Student Verifications', icon: 'how_to_reg' },
         { id: 'landlord-approvals', label: 'Landlord Approvals', icon: 'domain_verification' },
         { id: 'listing-reviews', label: 'Listing Reviews', icon: 'rate_review' },
     ];
@@ -704,7 +748,7 @@ export default function AdminDashboardPage() {
     return (
         <div className="flex min-h-screen font-display bg-background-light dark:bg-slate-950/50">
             {/* Sidebar */}
-            <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed h-full z-10">
+            <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col fixed top-16 bottom-0 z-10">
                 <div className="p-6 flex items-center gap-3">
                     <div className="bg-primary rounded-lg p-2 text-white">
                         <span className="material-symbols-outlined block">home_work</span>
@@ -752,29 +796,125 @@ export default function AdminDashboardPage() {
                     <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-4">
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-2">Logged in as</p>
                         <div className="flex items-center gap-3">
-                            <div className="size-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">A</div>
+                            <div className="size-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                {adminProfile?.full_name
+                                    ? adminProfile.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+                                    : 'A'}
+                            </div>
                             <div className="overflow-hidden">
-                                <p className="text-sm font-semibold truncate text-slate-900 dark:text-white">Admin</p>
-                                <p className="text-[10px] text-slate-500 truncate">Admin Portal</p>
+                                <p className="text-sm font-semibold truncate text-slate-900 dark:text-white">{adminProfile?.full_name ?? 'Admin'}</p>
+                                <p className="text-[10px] text-slate-500 capitalize truncate">{adminProfile?.role?.replace(/_/g, ' ') ?? 'Admin Portal'}</p>
                             </div>
                         </div>
                     </div>
+                    <button
+                        onClick={handleLogout}
+                        className="mt-3 w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[16px]">logout</span>
+                        Logout
+                    </button>
                 </div>
             </aside>
 
             {/* Main */}
             <main className="flex-1 ml-64 flex flex-col min-w-0">
-                {/* Top bar */}
-                <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 px-8 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-slate-400">school</span>
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-white">CMU-Africa Admin</h2>
+                {/* Navbar */}
+                <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-16 z-10 px-6 flex items-center justify-between gap-4">
+                    {/* Left — breadcrumb */}
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="material-symbols-outlined text-primary text-xl shrink-0">admin_panel_settings</span>
+                        <span className="text-xs text-slate-400 font-medium hidden sm:block">Admin</span>
+                        <span className="text-slate-300 dark:text-slate-600 hidden sm:block">/</span>
+                        <span className="text-sm font-bold text-slate-900 dark:text-white truncate capitalize">
+                            {tab === 'overview' ? 'Overview' : tab === 'landlord-approvals' ? 'Landlord Approvals' : 'Listing Reviews'}
+                        </span>
                     </div>
-                    <div className="relative p-1">
-                        <span className="material-symbols-outlined text-slate-500 cursor-pointer hover:text-primary transition-colors block">notifications</span>
+
+                    {/* Centre — pending action pills */}
+                    <div className="flex items-center gap-2">
                         {pendingKyc.length > 0 && (
-                            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                            <button
+                                onClick={() => setTab('landlord-approvals')}
+                                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[14px]">pending_actions</span>
+                                {pendingKyc.length} KYC pending
+                            </button>
                         )}
+                        {listingQueue.length > 0 && (
+                            <button
+                                onClick={() => setTab('listing-reviews')}
+                                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 text-xs font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[14px]">rate_review</span>
+                                {listingQueue.length} listings to review
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Right — user menu */}
+                    <div className="flex items-center gap-3 shrink-0">
+                        {/* Notification dot if any pending */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setTab('landlord-approvals')}
+                                className="flex items-center justify-center w-9 h-9 rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                aria-label="Pending actions"
+                            >
+                                <span className="material-symbols-outlined text-[20px]">notifications</span>
+                            </button>
+                            {(pendingKyc.length > 0 || listingQueue.length > 0) && (
+                                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900" />
+                            )}
+                        </div>
+
+                        {/* Avatar dropdown */}
+                        <div className="relative" ref={menuRef}>
+                            <button
+                                onClick={() => setMenuOpen((p) => !p)}
+                                className="flex items-center gap-2.5 pl-3 border-l border-slate-200 dark:border-slate-700 focus:outline-none"
+                            >
+                                <div className="text-right hidden sm:block">
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
+                                        {adminProfile?.full_name ?? 'Admin'}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 capitalize leading-tight">
+                                        {adminProfile?.role?.replace(/_/g, ' ') ?? 'Administrator'}
+                                    </p>
+                                </div>
+                                <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                    {adminProfile?.full_name
+                                        ? adminProfile.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+                                        : 'A'}
+                                </div>
+                                <span className="material-symbols-outlined text-slate-400 text-[18px] hidden sm:block">expand_more</span>
+                            </button>
+
+                            {menuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-1 z-50">
+                                    <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800">
+                                        <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{adminProfile?.full_name ?? 'Admin'}</p>
+                                        <p className="text-[11px] text-slate-400 capitalize truncate">{adminProfile?.role?.replace(/_/g, ' ') ?? 'Administrator'}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => { setMenuOpen(false); setTab('overview'); }}
+                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px] text-slate-400">dashboard</span>
+                                        Overview
+                                    </button>
+                                    <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                                    <button
+                                        onClick={() => { setMenuOpen(false); handleLogout(); }}
+                                        className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">logout</span>
+                                        Logout
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </header>
 
@@ -783,189 +923,262 @@ export default function AdminDashboardPage() {
                     {/* ── Overview tab ── */}
                     {tab === 'overview' && (
                         <div className="space-y-8">
-                            {/* Metrics */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="p-2 bg-primary/10 rounded-lg text-primary"><span className="material-symbols-outlined block">group</span></div>
-                                        <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">+5.2%</span>
-                                    </div>
-                                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Total Verified Students</p>
-                                    <h3 className="text-2xl font-bold mt-1 text-slate-900 dark:text-white">1,240</h3>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Overview</h2>
+                                    <p className="text-slate-500 text-sm mt-1">Live platform stats and pending actions.</p>
                                 </div>
+                                <button
+                                    onClick={loadOverview}
+                                    disabled={overviewLoading}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50"
+                                >
+                                    <span className={`material-symbols-outlined text-[18px] ${overviewLoading ? 'animate-spin' : ''}`}>refresh</span>
+                                    Refresh
+                                </button>
+                            </div>
+
+                            {/* Metric cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                                     <div className="flex items-start justify-between mb-4">
-                                        <div className="p-2 bg-primary/10 rounded-lg text-primary"><span className="material-symbols-outlined block">map</span></div>
-                                        <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">+2.4%</span>
+                                        <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                                            <span className="material-symbols-outlined block">apartment</span>
+                                        </div>
+                                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded">Live</span>
                                     </div>
                                     <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Active Listings</p>
-                                    <h3 className="text-2xl font-bold mt-1 text-slate-900 dark:text-white">85</h3>
+                                    <h3 className="text-3xl font-bold mt-1 text-slate-900 dark:text-white">
+                                        {overviewLoading ? <span className="text-slate-300 dark:text-slate-600">—</span> : (activeListingsCount ?? '—')}
+                                    </h3>
                                 </div>
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                                     <div className="flex items-start justify-between mb-4">
-                                        <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500"><span className="material-symbols-outlined block">pending_actions</span></div>
-                                        <span className="text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">Attention</span>
+                                        <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500">
+                                            <span className="material-symbols-outlined block">domain_verification</span>
+                                        </div>
+                                        {pendingKyc.length > 0 && (
+                                            <span className="text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-2 py-1 rounded">Attention</span>
+                                        )}
                                     </div>
-                                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Pending Verifications</p>
-                                    <h3 className="text-2xl font-bold mt-1 text-slate-900 dark:text-white">12</h3>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Pending Landlord KYCs</p>
+                                    <h3 className="text-3xl font-bold mt-1 text-slate-900 dark:text-white">
+                                        {overviewLoading ? <span className="text-slate-300 dark:text-slate-600">—</span> : pendingKyc.length}
+                                    </h3>
                                 </div>
                                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                                     <div className="flex items-start justify-between mb-4">
-                                        <div className="p-2 bg-green-500/10 rounded-lg text-green-500"><span className="material-symbols-outlined block">handshake</span></div>
-                                        <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded">+12%</span>
+                                        <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
+                                            <span className="material-symbols-outlined block">rate_review</span>
+                                        </div>
+                                        {listingQueue.length > 0 && (
+                                            <span className="text-xs font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">Attention</span>
+                                        )}
                                     </div>
-                                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Successful Matches</p>
-                                    <h3 className="text-2xl font-bold mt-1 text-slate-900 dark:text-white">450</h3>
+                                    <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Listings Pending Review</p>
+                                    <h3 className="text-3xl font-bold mt-1 text-slate-900 dark:text-white">
+                                        {overviewLoading ? <span className="text-slate-300 dark:text-slate-600">—</span> : listingQueue.length}
+                                    </h3>
                                 </div>
                             </div>
 
-                            {/* Pending KYC alert */}
-                            {pendingKyc.length > 0 && (
-                                <div className="flex items-center gap-4 p-5 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl">
-                                    <span className="material-symbols-outlined text-amber-500 text-3xl">pending_actions</span>
-                                    <div className="flex-1">
-                                        <p className="font-bold text-slate-900 dark:text-white">{pendingKyc.length} landlord KYC submission{pendingKyc.length !== 1 ? 's' : ''} awaiting review</p>
-                                        <p className="text-sm text-slate-500">Review and approve or reject their identity documents.</p>
+                            {/* Action panels */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                {/* Pending KYCs */}
+                                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                        <h3 className="font-bold text-slate-900 dark:text-white">Landlord KYC Queue</h3>
+                                        <button onClick={() => setTab('landlord-approvals')} className="text-primary text-sm font-semibold hover:underline">View All</button>
                                     </div>
-                                    <button onClick={() => setTab('landlord-approvals')} className="px-4 py-2 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white transition-colors">
-                                        Review Now
-                                    </button>
+                                    {overviewLoading ? (
+                                        <div className="flex items-center justify-center py-12">
+                                            <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
+                                        </div>
+                                    ) : pendingKyc.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400">
+                                            <span className="material-symbols-outlined text-4xl">verified_user</span>
+                                            <p className="text-sm font-medium">No pending KYC submissions</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                            {pendingKyc.slice(0, 4).map((user) => {
+                                                const initials = user.full_name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase();
+                                                return (
+                                                    <div key={user.user_id} className="flex items-center gap-3 px-5 py-4">
+                                                        <div className="size-9 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs shrink-0">{initials}</div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.full_name}</p>
+                                                            <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setReviewTarget(user)}
+                                                            className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                                                        >
+                                                            Review
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                            {pendingKyc.length > 4 && (
+                                                <div className="px-5 py-3 text-xs text-slate-400 text-center">
+                                                    +{pendingKyc.length - 4} more —{' '}
+                                                    <button onClick={() => setTab('landlord-approvals')} className="text-primary font-semibold hover:underline">see all</button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            )}
 
-                            {/* Main grid */}
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                                {/* Left: verification table + flagged listings */}
-                                <div className="lg:col-span-2 space-y-6">
-                                    {/* Pending student verifications */}
-                                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                                        <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Pending Student Verifications</h3>
-                                            <button onClick={() => setTab('student-verifications')} className="text-primary text-sm font-semibold hover:underline">View All</button>
-                                        </div>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left border-collapse">
-                                                <thead>
-                                                    <tr className="bg-slate-50 dark:bg-slate-800/50">
-                                                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Student Name</th>
-                                                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">University Email</th>
-                                                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Department</th>
-                                                        <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-slate-500">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                                    {[
-                                                        { name: 'Jean Doe', email: 'j.doe@andrew.cmu.edu', dept: 'Information Tech' },
-                                                        { name: 'Alice Keza', email: 'akeza@andrew.cmu.edu', dept: 'Engineering' },
-                                                        { name: 'Bob Smith', email: 'bsmith@andrew.cmu.edu', dept: 'Business Management' },
-                                                    ].map((s) => (
-                                                        <tr key={s.email} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">{s.name}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-primary">{s.email}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400">{s.dept}</td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <button className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors">Activate</button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                {/* Pending listing reviews */}
+                                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                                    <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                                        <h3 className="font-bold text-slate-900 dark:text-white">Listing Review Queue</h3>
+                                        <button onClick={() => setTab('listing-reviews')} className="text-primary text-sm font-semibold hover:underline">View All</button>
                                     </div>
-
-                                    {/* Flagged listings */}
-                                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                                        <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-                                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Flagged Listings</h3>
+                                    {overviewLoading ? (
+                                        <div className="flex items-center justify-center py-12">
+                                            <span className="material-symbols-outlined animate-spin text-primary text-3xl">progress_activity</span>
                                         </div>
-                                        <div className="p-6 space-y-4">
-                                            {[
-                                                { title: 'Modern Studio near Bumbogo', reason: 'Incorrect Pricing / Student Scam Report', hot: true },
-                                                { title: 'Cozy Room for Graduate Students', reason: 'Amenities not as described', hot: false },
-                                            ].map((f) => (
-                                                <div key={f.title} className={`flex items-center gap-4 p-4 rounded-lg border ${f.hot ? 'bg-red-50 dark:bg-red-500/10 border-red-100 dark:border-red-500/20' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800'}`}>
-                                                    <div className="w-12 h-12 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0">
-                                                        <span className="material-symbols-outlined text-slate-400">home</span>
+                                    ) : listingQueue.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-400">
+                                            <span className="material-symbols-outlined text-4xl">task_alt</span>
+                                            <p className="text-sm font-medium">No listings pending review</p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                                            {listingQueue.slice(0, 4).map((item) => (
+                                                <div key={item.listing_id} className="flex items-center gap-3 px-5 py-4">
+                                                    <div className="size-9 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
+                                                        {item.cover_url ? (
+                                                            // eslint-disable-next-line @next/next/no-img-element
+                                                            <img src={mediaUrl(item.cover_url)} alt="" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <span className="material-symbols-outlined text-slate-400 text-[18px]">apartment</span>
+                                                        )}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <h4 className="text-sm font-bold truncate text-slate-900 dark:text-white">{f.title}</h4>
-                                                        <p className={`text-xs font-medium truncate ${f.hot ? 'text-red-600 dark:text-red-400' : 'text-slate-500'}`}>Reason: {f.reason}</p>
+                                                        <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{item.full_address}</p>
+                                                        <p className="text-xs text-slate-400 truncate">{item.owner_name} · {item.monthly_rent_rwf != null ? `RWF ${item.monthly_rent_rwf.toLocaleString()}/mo` : '—'}</p>
                                                     </div>
-                                                    <div className="flex gap-2">
-                                                        <button className="p-2 hover:bg-red-100 dark:hover:bg-red-500/30 text-red-600 dark:text-red-400 rounded-lg transition-colors">
-                                                            <span className="material-symbols-outlined text-[20px]">delete_forever</span>
-                                                        </button>
-                                                        <button className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg transition-colors">
-                                                            <span className="material-symbols-outlined text-[20px]">visibility</span>
-                                                        </button>
-                                                    </div>
+                                                    <button
+                                                        onClick={() => setDetailTarget(item)}
+                                                        className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                                                    >
+                                                        Review
+                                                    </button>
                                                 </div>
                                             ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Right: housing status chart + neighbourhood activity */}
-                                <div className="space-y-8">
-                                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
-                                        <h3 className="font-bold text-lg mb-6 text-slate-900 dark:text-white">Housing Status</h3>
-                                        <div className="relative w-48 h-48 mx-auto">
-                                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                                                <path className="text-slate-100 dark:text-slate-800" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="100, 100" strokeWidth="3" />
-                                                <path className="text-primary" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeDasharray="68, 100" strokeWidth="3" />
-                                            </svg>
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                                <span className="text-3xl font-bold text-slate-900 dark:text-white">68%</span>
-                                                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Matched</span>
-                                            </div>
-                                        </div>
-                                        <div className="mt-8 space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-3 h-3 rounded-full bg-primary shadow-sm shadow-primary/30"></span>
-                                                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Found Housing</span>
+                                            {listingQueue.length > 4 && (
+                                                <div className="px-5 py-3 text-xs text-slate-400 text-center">
+                                                    +{listingQueue.length - 4} more —{' '}
+                                                    <button onClick={() => setTab('listing-reviews')} className="text-primary font-semibold hover:underline">see all</button>
                                                 </div>
-                                                <span className="text-sm font-bold text-slate-900 dark:text-white">843 Students</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700"></span>
-                                                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Still Searching</span>
-                                                </div>
-                                                <span className="text-sm font-bold text-slate-900 dark:text-white">397 Students</span>
-                                            </div>
+                                            )}
                                         </div>
-                                        <button className="w-full mt-6 py-2 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-sm font-bold rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                                            View Analytics Report
-                                        </button>
-                                    </div>
-
-                                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                                        <div className="p-6">
-                                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Neighbourhood Activity</h3>
-                                            <p className="text-xs text-slate-500 mt-1">Highest listing density in Bumbogo</p>
-                                        </div>
-                                        <div className="h-40 bg-slate-100 dark:bg-slate-800 relative flex items-center justify-center">
-                                            <div className="flex flex-col items-center">
-                                                <div className="p-2 bg-primary text-white rounded-full shadow-lg shadow-primary/40 animate-pulse flex items-center justify-center">
-                                                    <span className="material-symbols-outlined block">location_on</span>
-                                                </div>
-                                                <span className="text-xs font-bold mt-2 bg-white/90 dark:bg-slate-900/90 text-slate-900 dark:text-white px-2 py-1 rounded shadow-sm backdrop-blur-md">Bumbogo Campus</span>
-                                            </div>
-                                        </div>
-                                        <div className="p-4 space-y-4">
-                                            {[{ label: 'Kacyiru', pct: '45%' }, { label: 'Nyarutarama', pct: '70%' }].map((n) => (
-                                                <div key={n.label} className="flex items-center justify-between text-xs">
-                                                    <span className="font-medium text-slate-600 dark:text-slate-300">{n.label}</span>
-                                                    <div className="w-24 h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                                        <div className="bg-primary h-full" style={{ width: n.pct }}></div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* Platform Insights */}
+                            {!overviewLoading && activeListingsData.length > 0 && (() => {
+                                const withRent = activeListingsData.filter((l) => l.monthly_rent_rwf != null);
+                                const avgRent = withRent.length > 0
+                                    ? Math.round(withRent.reduce((s, l) => s + (l.monthly_rent_rwf ?? 0), 0) / withRent.length)
+                                    : null;
+                                const minRent = withRent.length > 0 ? Math.min(...withRent.map((l) => l.monthly_rent_rwf!)) : null;
+                                const maxRent = withRent.length > 0 ? Math.max(...withRent.map((l) => l.monthly_rent_rwf!)) : null;
+
+                                const TYPE_LABELS: Record<string, string> = {
+                                    single_room: 'Single Room',
+                                    shared_room: 'Shared Room',
+                                    self_contained_studio: 'Studio',
+                                    full_apartment: 'Full Apartment',
+                                };
+                                const typeCounts = activeListingsData.reduce((acc, l) => {
+                                    if (l.property_type) acc[l.property_type] = (acc[l.property_type] ?? 0) + 1;
+                                    return acc;
+                                }, {} as Record<string, number>);
+                                const typeEntries = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+                                const topType = typeEntries[0];
+
+                                const neighCounts = activeListingsData.reduce((acc, l) => {
+                                    const n = l.neighborhood_name ?? 'Other';
+                                    acc[n] = (acc[n] ?? 0) + 1;
+                                    return acc;
+                                }, {} as Record<string, number>);
+                                const topNeighs = Object.entries(neighCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                                const maxNeighCount = topNeighs[0]?.[1] ?? 1;
+
+                                return (
+                                    <div className="space-y-6">
+                                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">Platform Insights</h3>
+
+                                        {/* Quick stat row */}
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            {[
+                                                { label: 'Avg Monthly Rent', value: avgRent != null ? `RWF ${avgRent.toLocaleString()}` : '—', icon: 'payments', color: 'text-primary bg-primary/10' },
+                                                { label: 'Lowest Rent', value: minRent != null ? `RWF ${minRent.toLocaleString()}` : '—', icon: 'trending_down', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' },
+                                                { label: 'Highest Rent', value: maxRent != null ? `RWF ${maxRent.toLocaleString()}` : '—', icon: 'trending_up', color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' },
+                                                { label: 'Most Listed Type', value: topType ? (TYPE_LABELS[topType[0]] ?? topType[0]) : '—', icon: 'category', color: 'text-violet-600 bg-violet-50 dark:bg-violet-900/20' },
+                                            ].map(({ label, value, icon, color }) => (
+                                                <div key={label} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm">
+                                                    <div className={`inline-flex p-2 rounded-lg ${color} mb-3`}>
+                                                        <span className="material-symbols-outlined text-[18px]">{icon}</span>
+                                                    </div>
+                                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                                                    <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5">{value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                            {/* Property type breakdown */}
+                                            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                                                <h4 className="font-bold text-slate-900 dark:text-white mb-4">Listings by Property Type</h4>
+                                                <div className="space-y-3">
+                                                    {typeEntries.map(([type, count]) => {
+                                                        const pct = Math.round((count / activeListingsData.length) * 100);
+                                                        return (
+                                                            <div key={type}>
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300 capitalize">
+                                                                        {TYPE_LABELS[type] ?? type.replace(/_/g, ' ')}
+                                                                    </span>
+                                                                    <span className="text-xs font-bold text-slate-500">{count} ({pct}%)</span>
+                                                                </div>
+                                                                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+
+                                            {/* Neighbourhood distribution */}
+                                            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
+                                                <h4 className="font-bold text-slate-900 dark:text-white mb-4">Top Neighbourhoods</h4>
+                                                <div className="space-y-3">
+                                                    {topNeighs.map(([name, count]) => {
+                                                        const pct = Math.round((count / maxNeighCount) * 100);
+                                                        return (
+                                                            <div key={name}>
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{name}</span>
+                                                                    <span className="text-xs font-bold text-slate-500">{count} listing{count !== 1 ? 's' : ''}</span>
+                                                                </div>
+                                                                <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
 
@@ -1155,57 +1368,6 @@ export default function AdminDashboardPage() {
                         </div>
                     )}
 
-                    {/* ── Student Verifications tab ── */}
-                    {tab === 'student-verifications' && (
-                        <div className="space-y-6">
-                            <div>
-                                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Student Verifications</h2>
-                                <p className="text-slate-500 text-sm mt-1">Students pending email confirmation or account activation.</p>
-                            </div>
-
-                            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-                                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                                    <p className="font-semibold text-slate-900 dark:text-white">Pending Verifications</p>
-                                    <span className="text-xs text-slate-400">Student activation is handled via email confirmation — verified automatically by Supabase.</span>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="bg-slate-50 dark:bg-slate-800/50">
-                                                <th className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">Student</th>
-                                                <th className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">Email</th>
-                                                <th className="px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-500">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                            {/* Placeholder rows — replace with real data when a student list endpoint is available */}
-                                            {[
-                                                { name: 'Jean Doe', email: 'j.doe@andrew.cmu.edu', status: 'Pending Email' },
-                                                { name: 'Alice Keza', email: 'akeza@andrew.cmu.edu', status: 'Pending Email' },
-                                                { name: 'Bob Smith', email: 'bsmith@andrew.cmu.edu', status: 'Pending Email' },
-                                            ].map((s) => (
-                                                <tr key={s.email} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                                                    <td className="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">{s.name}</td>
-                                                    <td className="px-6 py-4 text-sm text-primary">{s.email}</td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 uppercase tracking-wide">
-                                                            {s.status}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
-                                    <p className="text-xs text-slate-400 flex items-center gap-1.5">
-                                        <span className="material-symbols-outlined text-[16px]">info</span>
-                                        A dedicated admin endpoint for listing students is not yet available. Rows above are placeholders.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </main>
 

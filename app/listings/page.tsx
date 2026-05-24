@@ -68,7 +68,7 @@ export default function ListingsPage() {
             setError(result.error.message);
             return;
         }
-        setListings(result.data ?? []);
+        setListings((result.data ?? []).filter((l) => l.status === 'active'));
     }, []);
 
     useEffect(() => { load(); }, [load]);
@@ -272,13 +272,10 @@ export default function ListingsPage() {
                                             </div>
 
                                             {/* Actions */}
-                                            <div className="flex items-center justify-between mt-auto">
-                                                <button className="bg-primary hover:bg-primary/90 text-white px-5 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm">
-                                                    Apply Now
-                                                </button>
+                                            <div className="mt-auto">
                                                 <Link
                                                     href={`/listings/${listing.id}`}
-                                                    className="flex items-center gap-1 text-slate-600 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium"
+                                                    className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
                                                 >
                                                     View Details
                                                     <span className="material-symbols-outlined text-lg">arrow_forward</span>

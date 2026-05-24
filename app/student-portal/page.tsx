@@ -140,6 +140,10 @@ export default function StudentPortalPage() {
                         <span className="material-symbols-outlined text-[22px]">notifications</span>
                         <span className="text-sm font-medium">Notifications</span>
                     </Link>
+                    <Link href="/student-portal/conversations" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                        <span className="material-symbols-outlined text-[22px]">forum</span>
+                        <span className="text-sm font-medium">Messages</span>
+                    </Link>
                     <Link href="/listings" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                         <span className="material-symbols-outlined text-[22px]">search</span>
                         <span className="text-sm font-medium">Browse Listings</span>
