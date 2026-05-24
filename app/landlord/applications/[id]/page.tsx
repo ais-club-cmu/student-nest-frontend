@@ -6,7 +6,7 @@ export default function StudentApplicationDetailPage({ params }: { params: { id:
     return (
         <div className="flex min-h-[calc(100vh-80px)] flex-col bg-background-light dark:bg-slate-950/50 font-display">
             {/* Navigation Header */}
-            <header className="flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 md:px-10 py-3 sticky top-0 z-50">
+            <header className="flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 md:px-10 py-3 sticky top-16 z-40">
                 <div className="flex items-center gap-4">
                     <Link href="/landlord" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                         <div className="text-primary size-8 flex items-center justify-center">

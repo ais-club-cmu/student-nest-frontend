@@ -8,8 +8,8 @@ import { logoutAction } from '@/app/actions/nestActions';
 
 const STATIC_NAV_LINKS = [
     { label: 'Browse Listings', href: '/listings' },
-    { label: 'About Us', href: '#' },
-    { label: 'Partners', href: '#' },
+    { label: 'About Us', href: '/about' },
+    { label: 'Partners', href: '/partners' },
 ];
 
 export default function Header() {
@@ -141,6 +141,16 @@ export default function Header() {
                                                 <span className="material-symbols-outlined text-[18px] text-slate-500">account_circle</span>
                                                 Profile
                                             </Link>
+                                            {(userRole === 'student' || userRole === 'landlord') && (
+                                                <Link
+                                                    href={userRole === 'student' ? '/student-portal/listings' : '/landlord/listings'}
+                                                    onClick={() => setMenuOpen(false)}
+                                                    className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                                                >
+                                                    <span className="material-symbols-outlined text-[18px] text-slate-500">apartment</span>
+                                                    My Listings
+                                                </Link>
+                                            )}
                                             <button
                                                 onClick={handleLogout}
                                                 disabled={isLoggingOut}
@@ -229,6 +239,16 @@ export default function Header() {
                                 <span className="material-symbols-outlined text-[18px] text-slate-500">account_circle</span>
                                 Profile
                             </Link>
+                            {(userRole === 'student' || userRole === 'landlord') && (
+                                <Link
+                                    href={userRole === 'student' ? '/student-portal/listings' : '/landlord/listings'}
+                                    onClick={() => setDrawerOpen(false)}
+                                    className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-[18px] text-slate-500">apartment</span>
+                                    My Listings
+                                </Link>
+                            )}
                         </>
                     )}
                 </nav>
