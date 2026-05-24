@@ -88,7 +88,7 @@ export default function LandlordDashboardPage() {
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         const role = localStorage.getItem('userRole');
-        if (!token || role !== 'landlord') {
+        if (!token || (role !== 'landlord' && role !== 'student')) {
             router.push('/login');
             return;
         }
@@ -99,7 +99,7 @@ export default function LandlordDashboardPage() {
             }
             if (result.data) {
                 const { kyc_status } = result.data;
-                if (kyc_status === 'rejected') {
+                if (role === 'landlord' && kyc_status === 'rejected') {
                     router.replace('/landlord-registration/id-verification');
                     return;
                 }
@@ -167,7 +167,7 @@ export default function LandlordDashboardPage() {
                         </div>
                         <div>
                             <h1 className="text-slate-900 dark:text-white font-bold text-lg leading-none">StudentNest</h1>
-                            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Landlord Portal</span>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Listing Portal</span>
                         </div>
                     </div>
                     <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
@@ -191,13 +191,15 @@ export default function LandlordDashboardPage() {
                         <span className="material-symbols-outlined text-[22px]">notifications</span>
                         <span className="text-sm font-medium">Notifications</span>
                     </Link>
-                    <Link href="/landlord-registration/id-verification" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                        <span className="material-symbols-outlined text-[22px]">verified_user</span>
-                        <span className="text-sm font-medium">ID Verification</span>
-                        {profile?.kyc_status === 'pending' && (
-                            <span className="ml-auto w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                        )}
-                    </Link>
+                    {profile?.role === 'landlord' && (
+                        <Link href="/landlord-registration/id-verification" onClick={() => setSidebarOpen(false)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                            <span className="material-symbols-outlined text-[22px]">verified_user</span>
+                            <span className="text-sm font-medium">ID Verification</span>
+                            {profile.kyc_status === 'pending' && (
+                                <span className="ml-auto w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                            )}
+                        </Link>
+                    )}
 
                     <div className="pt-4 pb-2">
                         <p className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Support</p>
@@ -234,19 +236,23 @@ export default function LandlordDashboardPage() {
                             <span className="material-symbols-outlined">menu</span>
                         </button>
                         <div>
-                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Landlord Dashboard</h2>
+                            <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{profile?.role === 'student' ? 'Listing Portal' : 'Landlord Dashboard'}</h2>
                             <p className="text-slate-500 text-sm">Welcome back, {firstName}.</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
-                        {profile && <KycBadge status={profile.kyc_status} />}
+                        {profile?.role === 'landlord' && <KycBadge status={profile.kyc_status} />}
                         <Link href="/notifications" className="relative p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
                             <span className="material-symbols-outlined text-2xl">notifications</span>
                         </Link>
                         <div className="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-800">
                             <div className="text-right hidden sm:block">
                                 <p className="text-sm font-bold text-slate-900 dark:text-white">{profile?.full_name ?? '—'}</p>
-                                <p className="text-[11px] text-slate-500 font-medium capitalize">{profile?.kyc_status === 'approved' ? 'Verified Landlord' : 'Landlord'}</p>
+                                <p className="text-[11px] text-slate-500 font-medium capitalize">
+                                    {profile?.role === 'landlord'
+                                        ? (profile.kyc_status === 'approved' ? 'Verified Landlord' : 'Landlord')
+                                        : 'Student'}
+                                </p>
                             </div>
                             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
                                 <span className="material-symbols-outlined text-primary text-xl">person</span>
@@ -256,7 +262,7 @@ export default function LandlordDashboardPage() {
                 </header>
 
                 {/* KYC pending banner */}
-                {profile?.kyc_status === 'pending' && (
+                {profile?.role === 'landlord' && profile?.kyc_status === 'pending' && (
                     <div className="mb-8 flex items-center justify-between bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 p-4 rounded-xl">
                         <div className="flex items-center gap-3">
                             <span className="material-symbols-outlined text-amber-500">pending</span>
@@ -346,18 +352,20 @@ export default function LandlordDashboardPage() {
                             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone</p>
                             <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{profile?.phone ?? 'Not provided'}</p>
                         </div>
-                        <div>
-                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">KYC Status</p>
-                            <p className={`text-sm font-bold capitalize ${
-                                profile?.kyc_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' :
-                                profile?.kyc_status === 'rejected' ? 'text-red-600 dark:text-red-400' :
-                                'text-amber-600 dark:text-amber-400'
-                            }`}>
-                                {profile?.kyc_status === 'approved' ? '✓ Verified' :
-                                 profile?.kyc_status === 'pending' ? 'Pending Review' :
-                                 profile?.kyc_status === 'rejected' ? 'Rejected' : '—'}
-                            </p>
-                        </div>
+                        {profile?.role === 'landlord' && (
+                            <div>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">KYC Status</p>
+                                <p className={`text-sm font-bold capitalize ${
+                                    profile.kyc_status === 'approved' ? 'text-emerald-600 dark:text-emerald-400' :
+                                    profile.kyc_status === 'rejected' ? 'text-red-600 dark:text-red-400' :
+                                    'text-amber-600 dark:text-amber-400'
+                                }`}>
+                                    {profile.kyc_status === 'approved' ? '✓ Verified' :
+                                     profile.kyc_status === 'pending' ? 'Pending Review' :
+                                     profile.kyc_status === 'rejected' ? 'Rejected' : '—'}
+                                </p>
+                            </div>
+                        )}
                         <div>
                             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Account Status</p>
                             <p className={`text-sm font-bold capitalize ${profile?.status === 'active' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}`}>
