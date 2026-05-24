@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { getPublicListingsAction } from '@/app/actions/listingsActions';
 import type { PropertyType, PublicListing, UtilityType } from '@/lib/types/api.types';
 
@@ -50,6 +51,7 @@ function nextAvailableMonth(listing: PublicListing): string | null {
 }
 
 export default function ListingsPage() {
+    const router = useRouter();
     const [listings, setListings] = useState<PublicListing[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -63,9 +65,17 @@ export default function ListingsPage() {
     const [utilities, setUtilities] = useState<UtilityType[]>([]);
     const [verifiedOnly, setVerifiedOnly] = useState(false);
     const [sortBy, setSortBy] = useState<SortKey>('default');
-    const [filtersOpen, setFiltersOpen] = useState(false); // mobile drawer
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
-    useEffect(() => { setRole(localStorage.getItem('userRole')); }, []);
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        const r = localStorage.getItem('userRole');
+        if (!token || r !== 'student') {
+            router.replace('/login');
+            return;
+        }
+        setRole(r);
+    }, [router]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -286,12 +296,10 @@ export default function ListingsPage() {
                                 </span>
                             )}
                         </button>
-                        {role === 'student' && (
-                            <Link href="/add-listing" className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shrink-0">
-                                <span className="material-symbols-outlined text-lg">add</span>
-                                <span className="hidden sm:inline">Add Listing</span>
-                            </Link>
-                        )}
+                        <Link href="/add-listing" className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shrink-0">
+                            <span className="material-symbols-outlined text-lg">add</span>
+                            <span className="hidden sm:inline">Add Listing</span>
+                        </Link>
                     </div>
                 </div>
             </div>
