@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { getUserProfileAction } from '@/app/actions/nestActions';
 import { handleAuthError } from '@/lib/auth-redirect';
@@ -95,6 +96,22 @@ export default function ProfilePage() {
                         </span>
                     </div>
                 </div>
+
+                {/* Listing portal CTA — students only */}
+                {profile.role === 'student' && (
+                    <Link href="/landlord">
+                        <div className="flex items-center gap-4 p-5 bg-primary/5 dark:bg-primary/10 border border-primary/20 rounded-2xl hover:bg-primary/10 dark:hover:bg-primary/20 transition-colors cursor-pointer">
+                            <div className="bg-primary rounded-xl p-2.5 shrink-0">
+                                <span className="material-symbols-outlined text-white text-2xl">home_work</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-slate-900 dark:text-slate-100">Listing Portal</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Upload and manage your rental listings</p>
+                            </div>
+                            <span className="material-symbols-outlined text-primary shrink-0">arrow_forward</span>
+                        </div>
+                    </Link>
+                )}
 
                 {/* Account details */}
                 <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 px-6 py-2">

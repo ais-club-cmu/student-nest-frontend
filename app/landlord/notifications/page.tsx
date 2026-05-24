@@ -68,7 +68,7 @@ export default function LandlordNotificationsPage() {
                         </div>
                         <div>
                             <h1 className="font-bold text-lg leading-none text-slate-900 dark:text-white">StudentNest</h1>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Landlord Portal</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Listing Portal</p>
                         </div>
                     </div>
                     <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">

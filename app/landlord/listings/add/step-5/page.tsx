@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateDraftStep5Action } from '@/app/actions/listingsActions';
 import { handleAuthError } from '@/lib/auth-redirect';
-import type { GenderPreference, SmokingPolicy, VisitorPolicy } from '@/lib/types/api.types';
+import type { GenderPreference, PetsAllowed, SmokingPolicy, VisitorPolicy } from '@/lib/types/api.types';
 
 export default function AddListingStep5Page() {
     const router = useRouter();
@@ -12,7 +12,7 @@ export default function AddListingStep5Page() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const [petsAllowed, setPetsAllowed] = useState<string | null>(null);
+    const [petsAllowed, setPetsAllowed] = useState<PetsAllowed | null>(null);
     const [smokingPolicy, setSmokingPolicy] = useState<SmokingPolicy | ''>('');
     const [genderPreference, setGenderPreference] = useState<GenderPreference | ''>('no_preference');
     const [visitorPolicy, setVisitorPolicy] = useState<VisitorPolicy | ''>('');
@@ -141,9 +141,10 @@ export default function AddListingStep5Page() {
                             </div>
                             <div className="flex gap-3">
                                 {([
-                                    { value: 'allowed', label: 'Allowed' },
-                                    { value: 'not_allowed', label: 'Not Allowed' },
-                                ] as { value: string; label: string }[]).map((opt) => (
+                                    { value: 'yes', label: 'Allowed' },
+                                    { value: 'negotiable', label: 'Negotiable' },
+                                    { value: 'no', label: 'Not Allowed' },
+                                ] as { value: PetsAllowed; label: string }[]).map((opt) => (
                                     <label
                                         key={opt.value}
                                         className={`flex items-center gap-2 px-5 py-3 rounded-xl border-2 cursor-pointer font-semibold text-sm transition-all ${

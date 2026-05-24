@@ -55,6 +55,9 @@ export default function ListingsPage() {
     const [error, setError] = useState<string | null>(null);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<FilterKey>('all');
+    const [role, setRole] = useState<string | null>(null);
+
+    useEffect(() => { setRole(localStorage.getItem('userRole')); }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -88,15 +91,26 @@ export default function ListingsPage() {
                         <h1 className="text-xl font-bold text-slate-900 dark:text-white">Browse Listings</h1>
                         <p className="text-sm text-slate-500 dark:text-slate-400">Find your perfect student accommodation</p>
                     </div>
-                    <div className="relative w-full sm:w-72">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
-                        <input
-                            className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-slate-900 dark:text-white"
-                            placeholder="Search by address or neighbourhood…"
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <div className="relative flex-1 sm:w-72">
+                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl">search</span>
+                            <input
+                                className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/50 outline-none transition-all text-slate-900 dark:text-white"
+                                placeholder="Search by address or neighbourhood…"
+                                type="text"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                            />
+                        </div>
+                        {role === 'student' && (
+                            <Link
+                                href="/landlord/listings/add"
+                                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm shrink-0"
+                            >
+                                <span className="material-symbols-outlined text-lg">add</span>
+                                <span className="hidden sm:inline">Add Listing</span>
+                            </Link>
+                        )}
                     </div>
                 </div>
 

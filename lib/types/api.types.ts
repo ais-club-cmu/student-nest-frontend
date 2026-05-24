@@ -204,8 +204,10 @@ export interface CalendarEntry {
   status: CalendarStatus;
 }
 
+export type PetsAllowed = 'yes' | 'no' | 'negotiable';
+
 export interface HouseRules {
-  pets_allowed?: string | null;
+  pets_allowed?: PetsAllowed | null;
   smoking_policy?: SmokingPolicy | null;
   gender_preference?: GenderPreference | null;
   visitor_policy?: VisitorPolicy | null;

@@ -135,7 +135,8 @@ export default function LandlordListingsPage() {
 
     const load = useCallback(async () => {
         const token = localStorage.getItem('accessToken');
-        if (!token) { router.push('/login'); return; }
+        const role = localStorage.getItem('userRole');
+        if (!token || (role !== 'landlord' && role !== 'student')) { router.push('/login'); return; }
 
         const profileResult = await getUserProfileAction(token);
         if (profileResult.error) {
@@ -143,11 +144,11 @@ export default function LandlordListingsPage() {
         }
         if (profileResult.data) {
             const { kyc_status } = profileResult.data;
-            if (kyc_status === 'rejected') {
+            if (role === 'landlord' && kyc_status === 'rejected') {
                 router.replace('/landlord-registration/id-verification');
                 return;
             }
-            setKycPendingReview(kyc_status === 'pending');
+            setKycPendingReview(role === 'landlord' && kyc_status === 'pending');
         }
 
         setLoading(true);
@@ -206,7 +207,7 @@ export default function LandlordListingsPage() {
                         </div>
                         <div>
                             <h1 className="font-bold text-lg leading-none text-slate-900 dark:text-white">StudentNest</h1>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">Landlord Portal</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">Listing Portal</p>
                         </div>
                     </div>
                     <button onClick={() => setSidebarOpen(false)} className="md:hidden p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
