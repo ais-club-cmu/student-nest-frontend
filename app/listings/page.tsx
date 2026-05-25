@@ -70,7 +70,7 @@ export default function ListingsPage() {
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
         const r = localStorage.getItem('userRole');
-        if (!token || r !== 'student') {
+        if (!token || !r) {
             router.replace('/login');
             return;
         }
@@ -296,10 +296,12 @@ export default function ListingsPage() {
                                 </span>
                             )}
                         </button>
-                        <Link href="/add-listing" className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shrink-0">
-                            <span className="material-symbols-outlined text-lg">add</span>
-                            <span className="hidden sm:inline">Add Listing</span>
-                        </Link>
+                        {role === 'student' && (
+                            <Link href="/add-listing" className="flex items-center gap-1.5 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shrink-0">
+                                <span className="material-symbols-outlined text-lg">add</span>
+                                <span className="hidden sm:inline">Add Listing</span>
+                            </Link>
+                        )}
                     </div>
                 </div>
             </div>

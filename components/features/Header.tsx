@@ -109,7 +109,7 @@ export default function Header() {
                         {/* Desktop nav */}
                         <nav className="hidden md:flex items-center gap-8">
                             {STATIC_NAV_LINKS.filter((link) =>
-                                link.href !== '/listings' || userRole === 'student'
+                                link.href !== '/listings' || !!userRole
                             ).map((link) => (
                                 <Link
                                     key={link.label}
@@ -258,7 +258,7 @@ export default function Header() {
                 {/* Nav links */}
                 <nav className="flex-1 px-4 py-6 flex flex-col gap-1 overflow-y-auto">
                     {STATIC_NAV_LINKS.filter((link) =>
-                        link.href !== '/listings' || userRole === 'student'
+                        link.href !== '/listings' || !!userRole
                     ).map((link) => (
                         <Link
                             key={link.label}
