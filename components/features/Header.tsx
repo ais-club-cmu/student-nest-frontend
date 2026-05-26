@@ -8,6 +8,7 @@ import { logoutAction } from '@/app/actions/nestActions';
 import { getNotificationsAction } from '@/app/actions/listingsActions';
 
 const STATIC_NAV_LINKS = [
+    { label: 'Home', href: '/' },
     { label: 'Browse Listings', href: '/listings' },
     { label: 'About Us', href: '/about' },
     { label: 'Partners', href: '/partners' },
