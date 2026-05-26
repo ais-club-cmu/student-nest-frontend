@@ -1,21 +1,27 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { loginAction } from '@/app/actions/nestActions';
 import type { LoginRequest } from '@/lib/types/api.types';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verified, setVerified] = useState(false);
   const [formData, setFormData] = useState<LoginRequest>({
     email: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('verified') === 'true') setVerified(true);
+  }, [searchParams]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -74,6 +80,12 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          {verified && (
+            <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+              <span className="material-symbols-outlined text-green-600 dark:text-green-400 shrink-0">check_circle</span>
+              <p className="text-sm font-medium text-green-700 dark:text-green-400">Email confirmed! You can now sign in.</p>
+            </div>
+          )}
           {error && (
             <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
               <span className="material-symbols-outlined text-red-600 dark:text-red-400">error</span>

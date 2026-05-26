@@ -65,8 +65,8 @@ export default function Footer() {
                 <div className="border-t border-slate-100 dark:border-slate-900 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
                     <p className="text-xs text-slate-500">© 2024 StudentNest Housing. All rights reserved.</p>
                     <div className="flex gap-8">
-                        <Link href="#" className="text-xs text-slate-500 hover:text-slate-900 transition-colors">Privacy Policy</Link>
-                        <Link href="#" className="text-xs text-slate-500 hover:text-slate-900 transition-colors">Terms of Service</Link>
+                        <Link href="/terms#privacy" className="text-xs text-slate-500 hover:text-slate-900 transition-colors">Privacy Policy</Link>
+                        <Link href="/terms#terms" className="text-xs text-slate-500 hover:text-slate-900 transition-colors">Terms of Service</Link>
                     </div>
                 </div>
             </div>

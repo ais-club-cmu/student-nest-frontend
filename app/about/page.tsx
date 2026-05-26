@@ -58,13 +58,13 @@ export default function AboutPage() {
                         <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-6">Why we built this</h2>
                         <div className="space-y-4 text-slate-600 dark:text-slate-400 leading-relaxed">
                             <p>
-                                When students arrive at <strong className="text-slate-900 dark:text-white">Carnegie Mellon University Africa</strong> in Kigali, many are coming from outside Rwanda for the first time. They rely on WhatsApp groups, word-of-mouth, and sheer luck to find somewhere to live — often weeks before the semester starts.
+                                When students arrive at <strong className="text-slate-900 dark:text-white">Carnegie Mellon University Africa</strong> in Kigali, many are coming from outside Rwanda for the first time. They rely on WhatsApp groups, word-of-mouth, and sheer luck to find somewhere to live, often weeks before the semester starts.
                             </p>
                             <p>
                                 Landlords post the same listing across five channels. Students overpay, get scammed, or end up in unsuitable accommodation. The market works, but only barely.
                             </p>
                             <p>
-                                As MSIT students ourselves, we had the skills to fix it. StudentNest brings listings, verification, and trust into one place — so the first week of grad school can be about orientation, not housing panic.
+                                As MSIT students ourselves, we had the skills to fix it. StudentNest brings listings, verification, and trust into one place, so the first week of grad school can be about orientation, not housing panic.
                             </p>
                         </div>
                     </div>
@@ -95,7 +95,7 @@ export default function AboutPage() {
                         <p className="text-xs font-bold uppercase tracking-widest text-primary mb-2">Our University</p>
                         <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Carnegie Mellon University Africa</h3>
                         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed max-w-2xl">
-                            CMU-Africa, located in Kigali, Rwanda, is the only Carnegie Mellon campus outside the United States. It offers graduate-level engineering and technology programs with a focus on addressing Africa&apos;s most pressing challenges. StudentNest is one of those solutions — built by students, for students.
+                            CMU-Africa, located in Kigali, Rwanda, is the only Carnegie Mellon campus outside the United States. It offers graduate-level engineering and technology programs with a focus on addressing Africa&apos;s most pressing challenges. StudentNest is one of those solutions, built by students, for students.
                         </p>
                     </div>
                 </div>
