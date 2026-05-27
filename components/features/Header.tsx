@@ -120,12 +120,14 @@ export default function Header() {
                                     {link.label}
                                 </Link>
                             ))}
-                            <Link
-                                href={userRole === 'landlord' ? '/landlord/listings' : '/landlord-registration'}
-                                className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors"
-                            >
-                                For Landlords
-                            </Link>
+                            {userRole !== 'student' && (
+                                <Link
+                                    href={userRole === 'landlord' ? '/landlord/listings' : '/landlord-registration'}
+                                    className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors"
+                                >
+                                    For Landlords
+                                </Link>
+                            )}
                         </nav>
 
                         {/* Right side */}
@@ -270,13 +272,15 @@ export default function Header() {
                             {link.label}
                         </Link>
                     ))}
-                    <Link
-                        href={userRole === 'landlord' ? '/landlord/listings' : '/landlord-registration'}
-                        onClick={() => setDrawerOpen(false)}
-                        className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                    >
-                        For Landlords
-                    </Link>
+                    {userRole !== 'student' && (
+                        <Link
+                            href={userRole === 'landlord' ? '/landlord/listings' : '/landlord-registration'}
+                            onClick={() => setDrawerOpen(false)}
+                            className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        >
+                            For Landlords
+                        </Link>
+                    )}
 
                     {isLoggedIn && (
                         <>

@@ -55,12 +55,12 @@ export default function AuthCallbackPage() {
 
     if (state === 'loading') {
         return (
-            <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
+            <div className="flex items-center justify-center min-h-[calc(100vh-80px)] bg-white">
                 <div className="flex flex-col items-center gap-4 text-center">
                     <span className="material-symbols-outlined text-primary text-5xl animate-spin" style={{ animationDuration: '1s' }}>
                         progress_activity
                     </span>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm">Confirming your email…</p>
+                    <p className="text-slate-500 text-sm">Confirming your email…</p>
                 </div>
             </div>
         );
@@ -68,14 +68,14 @@ export default function AuthCallbackPage() {
 
     if (state === 'error') {
         return (
-            <div className="flex items-center justify-center min-h-[calc(100vh-80px)] px-4">
+            <div className="flex items-center justify-center min-h-[calc(100vh-80px)] bg-white px-4">
                 <div className="flex flex-col items-center gap-6 text-center max-w-sm">
-                    <div className="size-16 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center">
-                        <span className="material-symbols-outlined text-red-600 dark:text-red-400 text-3xl">error</span>
+                    <div className="size-16 bg-red-100 rounded-full flex items-center justify-center">
+                        <span className="material-symbols-outlined text-red-600 text-3xl">error</span>
                     </div>
                     <div>
-                        <h1 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Link expired</h1>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{errorMsg}</p>
+                        <h1 className="text-2xl font-black text-slate-900 mb-2">Link expired</h1>
+                        <p className="text-slate-500 text-sm leading-relaxed">{errorMsg}</p>
                     </div>
                     <div className="flex flex-col gap-3 w-full">
                         <Link
@@ -98,18 +98,18 @@ export default function AuthCallbackPage() {
 
     // confirmed
     return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-80px)] px-4">
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)] bg-white px-4">
             <div className="flex flex-col items-center gap-6 text-center max-w-sm">
-                <div className="size-16 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
-                    <span className="material-symbols-outlined text-green-600 dark:text-green-400 text-3xl">check_circle</span>
+                <div className="size-16 bg-green-100 rounded-full flex items-center justify-center">
+                    <span className="material-symbols-outlined text-green-600 text-3xl">check_circle</span>
                 </div>
                 <div>
-                    <h1 className="text-2xl font-black text-slate-900 dark:text-white mb-2">Email confirmed!</h1>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">
+                    <h1 className="text-2xl font-black text-slate-900 mb-2">Email confirmed!</h1>
+                    <p className="text-slate-500 text-sm leading-relaxed">
                         Your account is active. Redirecting you to sign in…
                     </p>
                 </div>
-                <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1 overflow-hidden">
+                <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
                     <div className="h-full bg-primary rounded-full animate-[grow_2.5s_linear_forwards]" />
                 </div>
                 <Link
