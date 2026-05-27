@@ -146,6 +146,25 @@ export async function logoutAction(body: LogoutRequest) {
 }
 
 /**
+ * Resend the email-confirmation link after registration.
+ *
+ * **Endpoint:** `POST /api/v1/auth/resend-confirmation`
+ *
+ * Always returns success to prevent user enumeration.
+ *
+ * @param email  The address the account was registered with.
+ * @returns `ApiResult<MessageResponse>`.
+ */
+export async function resendConfirmationAction(email: string) {
+  const result = await nestRequest<MessageResponse>('/api/v1/auth/resend-confirmation', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    cache: 'no-store',
+  });
+  return result;
+}
+
+/**
  * Request a password-reset email.
  *
  * **Endpoint:** `POST /api/v1/auth/password/reset-request`

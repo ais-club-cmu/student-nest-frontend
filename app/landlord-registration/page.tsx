@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { registerLandlordAction } from '@/app/actions/nestActions';
 import { getUserProfileAction } from '@/app/actions/nestActions';
 import type { LandlordRegisterRequest } from '@/lib/types/api.types';
+import { PASSWORD_RULES } from '@/lib/utils/registerValidation';
 
 const COUNTRY_CODES = [
     { code: '+250', label: '🇷🇼 +250' },
@@ -30,6 +31,16 @@ export default function LandlordRegistrationPage() {
     const [error, setError] = useState<string | null>(null);
     const [countryCode, setCountryCode] = useState('+250');
     const [phoneLocal, setPhoneLocal] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [passwordFocused, setPasswordFocused] = useState(false);
+    const [addressTouched, setAddressTouched] = useState(false);
+    const [addressError, setAddressError] = useState('');
+
+    const validateAddress = (val: string) => {
+        if (!val.trim()) return 'Address is required.';
+        if (val.trim().length < 10) return 'Please enter a more complete address (at least 10 characters).';
+        return '';
+    };
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
@@ -62,22 +73,35 @@ export default function LandlordRegistrationPage() {
         const sanitized = name === 'national_id' ? value.replace(/\D/g, '').slice(0, 16) : value;
         setFormData((prev) => ({ ...prev, [name]: sanitized }));
         setError(null);
+        // Re-validate address live once the user has already blurred it
+        if (name === 'address' && addressTouched) {
+            setAddressError(validateAddress(sanitized));
+        }
     };
 
     const handleNext = async (e: React.FormEvent) => {
         e.preventDefault();
         
         if (step === 1) {
-            // Validate step 1 fields
             if (!formData.full_name || !formData.email || !formData.phone || !formData.national_id || !formData.address) {
-                setError('Please fill in all required fields');
+                setError('Please fill in all required fields.');
+                return;
+            }
+            const addrErr = validateAddress(formData.address);
+            if (addrErr) {
+                setAddressTouched(true);
+                setAddressError(addrErr);
                 return;
             }
             setStep(2);
         } else if (step === 2) {
-            // Validate step 2 (password)
             if (!formData.password) {
-                setError('Please enter a password');
+                setError('Please enter a password.');
+                return;
+            }
+            const failedRule = PASSWORD_RULES.find((r) => !r.test(formData.password));
+            if (failedRule) {
+                setError(failedRule.label + ' — please update your password.');
                 return;
             }
             // Submit registration
@@ -100,7 +124,7 @@ export default function LandlordRegistrationPage() {
 
             if (result.data) {
                 // Ask landlord to confirm email before ID verification
-                router.push('/landlord-registration/confirm-email');
+                router.push(`/landlord-registration/confirm-email?email=${encodeURIComponent(formData.email)}`);
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred');
@@ -193,21 +217,41 @@ export default function LandlordRegistrationPage() {
                                                 <option key={code} value={code}>{label}</option>
                                             ))}
                                         </select>
-                                        <input
-                                            className="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-r-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
-                                            id="phone"
-                                            name="phone"
-                                            placeholder="7XX XXX XXX"
-                                            type="tel"
-                                            value={phoneLocal}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                setPhoneLocal(val);
-                                                setFormData((prev) => ({ ...prev, phone: countryCode + val }));
-                                            }}
-                                            required
-                                        />
+                                        <div className="relative w-full">
+                                            <input
+                                                className="w-full px-4 py-3 pr-14 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-r-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
+                                                id="phone"
+                                                name="phone"
+                                                placeholder="7XXXXXXXX"
+                                                type="tel"
+                                                inputMode="numeric"
+                                                maxLength={9}
+                                                value={phoneLocal}
+                                                onChange={(e) => {
+                                                    // digits only, strip leading zero, max 9
+                                                    const val = e.target.value
+                                                        .replace(/\D/g, '')
+                                                        .replace(/^0+/, '')
+                                                        .slice(0, 9);
+                                                    setPhoneLocal(val);
+                                                    setFormData((prev) => ({ ...prev, phone: countryCode + val }));
+                                                }}
+                                                required
+                                            />
+                                            <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono tabular-nums ${
+                                                phoneLocal.length === 9
+                                                    ? 'text-emerald-500'
+                                                    : phoneLocal.length > 0
+                                                    ? 'text-slate-400'
+                                                    : 'text-slate-300 dark:text-slate-600'
+                                            }`}>
+                                                {phoneLocal.length}/9
+                                            </span>
+                                        </div>
                                     </div>
+                                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                                        9 digits after the country code, no leading zero — e.g. <span className="font-medium text-slate-500 dark:text-slate-400">7XXXXXXXX</span>
+                                    </p>
                                 </div>
                             </div>
 
@@ -247,16 +291,39 @@ export default function LandlordRegistrationPage() {
                                 <div className="relative">
                                     <span className="material-symbols-outlined absolute left-3 top-4 text-slate-400 text-sm">location_on</span>
                                     <textarea
-                                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white resize-y"
+                                        className={`w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 rounded-lg focus:ring-2 outline-none transition-all dark:text-white resize-y ${
+                                            addressTouched && addressError
+                                                ? 'border-2 border-red-400 dark:border-red-500 focus:ring-red-400/40'
+                                                : addressTouched && !addressError && formData.address
+                                                ? 'border-2 border-emerald-400 dark:border-emerald-500 focus:ring-emerald-400/40'
+                                                : 'border border-slate-300 dark:border-slate-700 focus:ring-primary focus:border-primary'
+                                        }`}
                                         id="address"
                                         name="address"
-                                        placeholder="Street name, Sector, District, Province"
+                                        placeholder="e.g. Kimihurura, Gasabo, Kigali"
                                         rows={3}
                                         value={formData.address}
                                         onChange={handleChange}
+                                        onBlur={() => {
+                                            setAddressTouched(true);
+                                            setAddressError(validateAddress(formData.address));
+                                        }}
                                         required
-                                    ></textarea>
+                                    />
                                 </div>
+                                {/* Inline error */}
+                                {addressTouched && addressError && (
+                                    <p className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+                                        <span className="material-symbols-outlined text-[14px]">error</span>
+                                        {addressError}
+                                    </p>
+                                )}
+                                {/* Format hint */}
+                                {!(addressTouched && addressError) && (
+                                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                                        Include village/cell, sector, and district — e.g. <span className="font-medium text-slate-500 dark:text-slate-400">Zindiro, Kicukiro, Kigali</span>
+                                    </p>
+                                )}
                             </div>
                         </>
                     )}
@@ -269,17 +336,47 @@ export default function LandlordRegistrationPage() {
                                 <div className="relative">
                                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">lock</span>
                                     <input
-                                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
+                                        className="w-full pl-10 pr-12 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
                                         id="password"
                                         name="password"
                                         placeholder="Enter a secure password"
-                                        type="password"
+                                        type={showPassword ? 'text' : 'password'}
                                         value={formData.password}
                                         onChange={handleChange}
+                                        onFocus={() => setPasswordFocused(true)}
+                                        onBlur={() => setPasswordFocused(false)}
+                                        autoComplete="new-password"
                                         required
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword((v) => !v)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                                        tabIndex={-1}
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                    >
+                                        <span className="material-symbols-outlined text-xl">{showPassword ? 'visibility_off' : 'visibility'}</span>
+                                    </button>
                                 </div>
-                                <p className="text-[11px] text-slate-500">Minimum 8 characters recommended for security</p>
+
+                                {/* Password requirements checklist */}
+                                {(passwordFocused || formData.password.length > 0) && (
+                                    <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1.5">
+                                        {PASSWORD_RULES.map((r) => {
+                                            const met = r.test(formData.password);
+                                            return (
+                                                <div key={r.id} className="flex items-center gap-2">
+                                                    <span className={`material-symbols-outlined text-[16px] shrink-0 ${met ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'}`}>
+                                                        {met ? 'check_circle' : 'radio_button_unchecked'}
+                                                    </span>
+                                                    <span className={`text-xs ${met ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                                                        {r.label}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2">
