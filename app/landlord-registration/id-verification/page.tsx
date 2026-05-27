@@ -2,7 +2,6 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { handleAuthError } from '@/lib/auth-redirect';
 import { Button } from '@/components/ui/Button';
 import type { KycUploadResponse } from '@/lib/types/api.types';
 
@@ -14,7 +13,6 @@ async function uploadKycDocument(
     const body = new FormData();
     body.append('file', file);
     try {
-        // POST to the Next.js proxy route — avoids CORS and backend body limits
         const res = await fetch(`/api/kyc-upload?doc_type=${encodeURIComponent(docType)}`, {
             method: 'POST',
             headers: { Authorization: `Bearer ${accessToken}` },
@@ -49,102 +47,148 @@ const MAX_SIZE_MB = 5;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
 const DOC_TYPES = [
-    { value: 'national_id', label: 'National ID Card' },
-    { value: 'proof_of_ownership', label: 'Proof of Ownership' },
-    // { value: 'drivers_license', label: "Driver's License" },
+    {
+        value: 'national_id',
+        label: 'National ID Card',
+        description: 'Front of your Rwandan national ID or passport',
+        icon: 'badge',
+    },
+    {
+        value: 'proof_of_ownership',
+        label: 'Proof of Ownership',
+        description: 'Title deed, lease agreement, or utility bill',
+        icon: 'home',
+    },
 ];
 
-function fileIcon(type: string) {
-    return type === 'application/pdf' ? 'picture_as_pdf' : 'image';
+type SlotStatus = 'idle' | 'uploading' | 'done' | 'error';
+
+type DocSlot = {
+    file: File | null;
+    preview: string | null;
+    status: SlotStatus;
+    error: string | null;
+};
+
+const emptySlot = (): DocSlot => ({ file: null, preview: null, status: 'idle', error: null });
+
+function formatSize(bytes: number) {
+    return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 export default function LandlordIDVerificationPage() {
     const router = useRouter();
-    const inputRef = useRef<HTMLInputElement>(null);
+    const inputRefs = useRef<Partial<Record<string, HTMLInputElement>>>({});
 
-    const [file, setFile] = useState<File | null>(null);
-    const [preview, setPreview] = useState<string | null>(null);
-    const [isDragging, setIsDragging] = useState(false);
-    const [docType, setDocType] = useState(DOC_TYPES[0].value);
-    const [validationError, setValidationError] = useState<string | null>(null);
-    const [uploadError, setUploadError] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const [uploadResult, setUploadResult] = useState<KycUploadResponse | null>(null);
+    const [slots, setSlots] = useState<Record<string, DocSlot>>(
+        Object.fromEntries(DOC_TYPES.map((dt) => [dt.value, emptySlot()]))
+    );
+    const [dragging, setDragging] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [globalError, setGlobalError] = useState<string | null>(null);
 
     const validate = (f: File): string | null => {
         if (!ACCEPTED_TYPES.includes(f.type)) return 'Only JPG, PNG, or PDF files are accepted.';
-        if (f.size > MAX_SIZE_BYTES) return `File is too large. Maximum size is ${MAX_SIZE_MB}MB.`;
+        if (f.size > MAX_SIZE_BYTES) return `File too large — maximum size is ${MAX_SIZE_MB} MB.`;
         return null;
     };
 
-    const applyFile = useCallback((f: File) => {
+    const applyFile = useCallback((docType: string, f: File) => {
         const err = validate(f);
-        if (err) { setValidationError(err); return; }
-        setValidationError(null);
-        setUploadError(null);
-        setUploadResult(null);
-        setFile(f);
+        if (err) {
+            setSlots((prev) => ({ ...prev, [docType]: { ...prev[docType], error: err } }));
+            return;
+        }
         if (f.type.startsWith('image/')) {
             const reader = new FileReader();
-            reader.onload = (e) => setPreview(e.target?.result as string);
+            reader.onload = (e) =>
+                setSlots((prev) => ({
+                    ...prev,
+                    [docType]: { file: f, preview: e.target?.result as string, status: 'idle', error: null },
+                }));
             reader.readAsDataURL(f);
         } else {
-            setPreview(null);
+            setSlots((prev) => ({
+                ...prev,
+                [docType]: { file: f, preview: null, status: 'idle', error: null },
+            }));
         }
-    }, []);
+        setGlobalError(null);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = (docType: string, e: React.ChangeEvent<HTMLInputElement>) => {
         const f = e.target.files?.[0];
-        if (f) applyFile(f);
+        if (f) applyFile(docType, f);
     };
 
-    const handleDrop = (e: React.DragEvent) => {
+    const handleDrop = (docType: string, e: React.DragEvent) => {
         e.preventDefault();
-        setIsDragging(false);
+        setDragging(null);
         const f = e.dataTransfer.files?.[0];
-        if (f) applyFile(f);
+        if (f) applyFile(docType, f);
     };
 
-    const handleRemove = () => {
-        setFile(null);
-        setPreview(null);
-        setValidationError(null);
-        setUploadError(null);
-        setUploadResult(null);
-        if (inputRef.current) inputRef.current.value = '';
+    const handleRemove = (docType: string) => {
+        setSlots((prev) => ({ ...prev, [docType]: emptySlot() }));
+        const input = inputRefs.current[docType];
+        if (input) input.value = '';
     };
+
+    const allSlotsReady = DOC_TYPES.every((dt) => {
+        const s = slots[dt.value];
+        return s.status === 'done' || (s.file !== null && s.status !== 'uploading');
+    });
 
     const handleSubmit = async () => {
-        if (!file) { setValidationError('Please select a file before submitting.'); return; }
-
         const accessToken = localStorage.getItem('accessToken');
-        if (!accessToken) {
-            router.push('/login');
-            return;
-        }
+        if (!accessToken) { router.push('/login'); return; }
 
-        setIsLoading(true);
-        setUploadError(null);
+        const toUpload = DOC_TYPES.filter(
+            (dt) => slots[dt.value].file && slots[dt.value].status !== 'done'
+        );
+        if (toUpload.length === 0) return;
 
-        const result = await uploadKycDocument(accessToken, docType, file);
-        setIsLoading(false);
+        setIsSubmitting(true);
+        setGlobalError(null);
 
-        if (result.error) {
-            if (result.error === 'Unauthorized' || result.error.toLowerCase().includes('authentication')) {
-                router.push('/login');
+        let lastResult: KycUploadResponse | null = null;
+
+        for (const dt of toUpload) {
+            const { file } = slots[dt.value];
+            if (!file) continue;
+
+            setSlots((prev) => ({
+                ...prev,
+                [dt.value]: { ...prev[dt.value], status: 'uploading', error: null },
+            }));
+
+            const result = await uploadKycDocument(accessToken, dt.value, file);
+
+            if (result.error) {
+                setSlots((prev) => ({
+                    ...prev,
+                    [dt.value]: { ...prev[dt.value], status: 'error', error: result.error },
+                }));
+                setIsSubmitting(false);
                 return;
             }
-            setUploadError(result.error);
-            return;
+
+            setSlots((prev) => ({
+                ...prev,
+                [dt.value]: { ...prev[dt.value], status: 'done', error: null },
+            }));
+            lastResult = result.data;
         }
 
-        setUploadResult(result.data);
+        setIsSubmitting(false);
 
-        // If no more documents are required, move to pending review
-        if (result.data?.ready_for_review) {
+        if (lastResult?.ready_for_review) {
             router.push('/landlord-registration/pending');
         }
     };
+
+    const uploadedCount = DOC_TYPES.filter((dt) => slots[dt.value].status === 'done').length;
+    const totalCount = DOC_TYPES.length;
 
     return (
         <div className="flex flex-1 justify-center py-10 px-4 min-h-[calc(100vh-80px)]">
@@ -166,11 +210,12 @@ export default function LandlordIDVerificationPage() {
                 </div>
 
                 <div className="p-8 flex flex-col gap-8">
+
                     {/* Heading */}
                     <div>
                         <h1 className="text-slate-900 dark:text-white text-3xl font-bold leading-tight mb-2">Verify your identity</h1>
                         <p className="text-slate-500 dark:text-slate-400 text-base leading-relaxed">
-                            Upload a clear photo of your government-issued ID so we can verify your identity and keep the StudentNest community safe.
+                            Upload both documents below before submitting. All files are encrypted and only accessible to verified staff.
                         </p>
                     </div>
 
@@ -183,163 +228,184 @@ export default function LandlordIDVerificationPage() {
                         </div>
                     </div>
 
-                    {/* Alerts */}
-                    {validationError && (
-                        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                            <span className="material-symbols-outlined text-red-600 dark:text-red-400">error</span>
-                            <p className="text-sm font-medium text-red-700 dark:text-red-400">{validationError}</p>
-                        </div>
-                    )}
-                    {uploadError && (
-                        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-                            <span className="material-symbols-outlined text-red-600 dark:text-red-400">error</span>
-                            <p className="text-sm font-medium text-red-700 dark:text-red-400">{uploadError}</p>
-                        </div>
-                    )}
-
-                    {/* Upload result banner */}
-                    {uploadResult && (
-                        <div className={`p-4 rounded-lg border ${uploadResult.ready_for_review ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`}>
-                            <div className="flex items-center gap-2 mb-3">
-                                <span className={`material-symbols-outlined ${uploadResult.ready_for_review ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                    {uploadResult.ready_for_review ? 'check_circle' : 'pending'}
-                                </span>
-                                <p className={`text-sm font-bold ${uploadResult.ready_for_review ? 'text-emerald-800 dark:text-emerald-200' : 'text-amber-800 dark:text-amber-200'}`}>
-                                    {uploadResult.message}
-                                </p>
-                            </div>
-                            {uploadResult.docs_uploaded.length > 0 && (
-                                <div className="mb-2">
-                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Uploaded</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {uploadResult.docs_uploaded.map((d) => (
-                                            <span key={d} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-xs font-medium">
-                                                <span className="material-symbols-outlined text-[14px]">check</span>
-                                                {d}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            {uploadResult.docs_still_required.length > 0 && (
-                                <div>
-                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Still required</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {uploadResult.docs_still_required.map((d) => (
-                                            <span key={d} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
-                                                <span className="material-symbols-outlined text-[14px]">upload</span>
-                                                {d}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Document type selector */}
-                    <div className="flex flex-col gap-2">
-                        <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Document Type</label>
-                        <div className="grid grid-cols-3 gap-3">
-                            {DOC_TYPES.map((dt) => (
-                                <button
+                    {/* Progress pills */}
+                    <div className="flex items-center gap-3">
+                        {DOC_TYPES.map((dt) => {
+                            const s = slots[dt.value];
+                            const done = s.status === 'done';
+                            const hasFile = !!s.file;
+                            return (
+                                <div
                                     key={dt.value}
-                                    type="button"
-                                    onClick={() => setDocType(dt.value)}
-                                    className={`flex flex-col items-center gap-1.5 p-3 rounded-lg border text-center transition-colors ${
-                                        docType === dt.value
-                                            ? 'border-primary bg-primary/5 text-primary'
-                                            : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary/50'
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                                        done
+                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-400'
+                                            : hasFile
+                                            ? 'bg-primary/5 border-primary/30 text-primary'
+                                            : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
                                     }`}
                                 >
-                                    <span className="material-symbols-outlined text-xl">badge</span>
-                                    <span className="text-xs font-medium leading-tight">{dt.label}</span>
-                                </button>
-                            ))}
-                        </div>
+                                    <span className="material-symbols-outlined text-[14px]">
+                                        {done ? 'check_circle' : hasFile ? 'attach_file' : 'radio_button_unchecked'}
+                                    </span>
+                                    {dt.label}
+                                </div>
+                            );
+                        })}
+                        <span className="ml-auto text-xs text-slate-400 font-medium">{uploadedCount}/{totalCount} uploaded</span>
                     </div>
 
-                    {/* Hidden file input */}
-                    <input
-                        ref={inputRef}
-                        type="file"
-                        accept=".jpg,.jpeg,.png,.pdf"
-                        className="sr-only"
-                        onChange={handleFileChange}
-                    />
-
-                    {/* Drop zone / preview */}
-                    {!file ? (
-                        <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => inputRef.current?.click()}
-                            onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
-                            onDrop={handleDrop}
-                            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                            onDragLeave={() => setIsDragging(false)}
-                            className={`flex flex-col items-center gap-6 rounded-xl border-2 border-dashed px-6 py-14 cursor-pointer transition-colors ${
-                                isDragging
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-primary hover:bg-primary/5'
-                            }`}
-                        >
-                            <div className="size-16 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                                <span className="material-symbols-outlined text-3xl">cloud_upload</span>
-                            </div>
-                            <div className="flex flex-col items-center gap-2">
-                                <p className="text-slate-900 dark:text-white text-lg font-bold text-center">
-                                    {isDragging ? 'Drop your file here' : 'Upload ID Document'}
-                                </p>
-                                <p className="text-slate-500 dark:text-slate-400 text-sm text-center">
-                                    Drag and drop or click to browse<br />JPG, PNG or PDF — max {MAX_SIZE_MB}MB
-                                </p>
-                            </div>
-                            <Button variant="primary" className="min-w-[140px] px-6 py-3" type="button">
-                                Select File
-                            </Button>
-                        </div>
-                    ) : (
-                        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                            {preview ? (
-                                <div className="relative bg-slate-100 dark:bg-slate-800 flex items-center justify-center h-56">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={preview} alt="ID preview" className="max-h-56 max-w-full object-contain" />
-                                </div>
-                            ) : (
-                                <div className="flex items-center justify-center h-32 bg-slate-100 dark:bg-slate-800">
-                                    <span className="material-symbols-outlined text-5xl text-slate-400">picture_as_pdf</span>
-                                </div>
-                            )}
-                            <div className="flex items-center justify-between gap-4 px-5 py-4 bg-white dark:bg-slate-900">
-                                <div className="flex items-center gap-3 min-w-0">
-                                    <span className="material-symbols-outlined text-primary text-2xl shrink-0">
-                                        {fileIcon(file.type)}
-                                    </span>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{file.name}</p>
-                                        <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={handleRemove}
-                                    className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 transition-colors shrink-0"
-                                >
-                                    <span className="material-symbols-outlined text-lg">delete</span>
-                                    Remove
-                                </button>
-                            </div>
+                    {/* Global error */}
+                    {globalError && (
+                        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <span className="material-symbols-outlined text-red-600 dark:text-red-400">error</span>
+                            <p className="text-sm font-medium text-red-700 dark:text-red-400">{globalError}</p>
                         </div>
                     )}
+
+                    {/* Document slots */}
+                    <div className="flex flex-col gap-5">
+                        {DOC_TYPES.map((dt) => {
+                            const slot = slots[dt.value];
+                            const isDraggingThis = dragging === dt.value;
+                            const isDone = slot.status === 'done';
+                            const isUploading = slot.status === 'uploading';
+
+                            return (
+                                <div
+                                    key={dt.value}
+                                    className={`rounded-xl border-2 overflow-hidden transition-colors ${
+                                        isDone
+                                            ? 'border-emerald-300 dark:border-emerald-700'
+                                            : slot.error
+                                            ? 'border-red-300 dark:border-red-700'
+                                            : slot.file
+                                            ? 'border-primary'
+                                            : 'border-slate-200 dark:border-slate-700'
+                                    }`}
+                                >
+                                    {/* Slot header */}
+                                    <div className={`flex items-center justify-between px-4 py-3 border-b ${
+                                        isDone
+                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                                    }`}>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`material-symbols-outlined text-lg ${isDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-primary'}`}>
+                                                {isDone ? 'check_circle' : dt.icon}
+                                            </span>
+                                            <div>
+                                                <p className="text-sm font-bold text-slate-900 dark:text-white">{dt.label}</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">{dt.description}</p>
+                                            </div>
+                                        </div>
+                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                            isDone
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                                : 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400'
+                                        }`}>
+                                            {isDone ? 'Uploaded' : 'Required'}
+                                        </span>
+                                    </div>
+
+                                    {/* Hidden input */}
+                                    <input
+                                        ref={(el) => { inputRefs.current[dt.value] = el ?? undefined; }}
+                                        type="file"
+                                        accept=".jpg,.jpeg,.png,.pdf"
+                                        className="sr-only"
+                                        onChange={(e) => handleFileChange(dt.value, e)}
+                                    />
+
+                                    {/* Content area */}
+                                    {isDone ? (
+                                        <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-900">
+                                            <span className="material-symbols-outlined text-emerald-500 text-xl">
+                                                {slot.file?.type === 'application/pdf' ? 'picture_as_pdf' : 'image'}
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{slot.file?.name}</p>
+                                                <p className="text-xs text-emerald-600 dark:text-emerald-400">Uploaded successfully</p>
+                                            </div>
+                                        </div>
+                                    ) : !slot.file ? (
+                                        /* Drop zone */
+                                        <div
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => inputRefs.current[dt.value]?.click()}
+                                            onKeyDown={(e) => e.key === 'Enter' && inputRefs.current[dt.value]?.click()}
+                                            onDrop={(e) => handleDrop(dt.value, e)}
+                                            onDragOver={(e) => { e.preventDefault(); setDragging(dt.value); }}
+                                            onDragLeave={() => setDragging(null)}
+                                            className={`flex items-center gap-5 px-5 py-5 cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors ${
+                                                isDraggingThis ? 'bg-primary/5' : ''
+                                            }`}
+                                        >
+                                            <div className="size-12 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                                                <span className="material-symbols-outlined text-2xl">cloud_upload</span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                                                    {isDraggingThis ? 'Drop file here' : 'Click or drag to upload'}
+                                                </p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">JPG, PNG or PDF — max {MAX_SIZE_MB} MB</p>
+                                            </div>
+                                            <Button variant="outline" size="sm" type="button" className="shrink-0">
+                                                Browse
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        /* File selected */
+                                        <div className="bg-white dark:bg-slate-900">
+                                            {slot.preview && (
+                                                <div className="bg-slate-100 dark:bg-slate-800 flex items-center justify-center h-40">
+                                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                    <img src={slot.preview} alt="Preview" className="max-h-40 max-w-full object-contain" />
+                                                </div>
+                                            )}
+                                            <div className="flex items-center gap-3 px-4 py-3">
+                                                <span className={`material-symbols-outlined text-xl shrink-0 ${isUploading ? 'text-primary animate-spin' : 'text-primary'}`}>
+                                                    {isUploading ? 'progress_activity' : slot.file.type === 'application/pdf' ? 'picture_as_pdf' : 'image'}
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{slot.file.name}</p>
+                                                    <p className="text-xs text-slate-500">{formatSize(slot.file.size)}{isUploading ? ' · Uploading…' : ''}</p>
+                                                </div>
+                                                {!isUploading && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemove(dt.value)}
+                                                        className="flex items-center gap-1 text-sm text-red-500 hover:text-red-700 transition-colors shrink-0"
+                                                    >
+                                                        <span className="material-symbols-outlined text-lg">delete</span>
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {slot.error && (
+                                                <div className="px-4 pb-3">
+                                                    <p className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1">
+                                                        <span className="material-symbols-outlined text-[14px]">error</span>
+                                                        {slot.error}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
 
                     {/* Requirements */}
                     <div className="flex flex-col gap-3">
                         <p className="text-slate-900 dark:text-white font-semibold text-sm uppercase tracking-wide">Requirements</p>
                         <div className="grid gap-3">
                             {[
-                                { label: 'Valid ID Document', sub: 'National ID Card, Passport, or Driver\'s License' },
-                                { label: 'Clearly visible & not expired', sub: 'No glare, blur, or cropping of important details' },
+                                { label: 'Clear and legible', sub: 'No glare, blur, or cropping of important details' },
+                                { label: 'Valid and not expired', sub: 'Documents must be current and government-issued' },
+                                { label: 'Accepted formats', sub: 'JPG, PNG, or PDF — max 5 MB each' },
                             ].map((r) => (
                                 <div key={r.label} className="flex items-center gap-3 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
                                     <span className="material-symbols-outlined text-emerald-500">check_circle</span>
@@ -359,6 +425,7 @@ export default function LandlordIDVerificationPage() {
                             className="gap-2 px-6 py-3"
                             type="button"
                             onClick={() => router.back()}
+                            disabled={isSubmitting}
                         >
                             <span className="material-symbols-outlined text-lg">arrow_back</span>
                             Back
@@ -367,11 +434,20 @@ export default function LandlordIDVerificationPage() {
                             variant="primary"
                             className="flex-1 gap-2 px-8 py-3"
                             type="button"
-                            disabled={!file || isLoading}
+                            disabled={!allSlotsReady || isSubmitting}
                             onClick={handleSubmit}
                         >
-                            {isLoading ? 'Uploading...' : uploadResult && !uploadResult.ready_for_review ? 'Upload Next Document' : 'Submit for Review'}
-                            {!isLoading && <span className="material-symbols-outlined text-lg">arrow_forward</span>}
+                            {isSubmitting ? (
+                                <>
+                                    <span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>
+                                    Uploading {uploadedCount + 1} of {totalCount}…
+                                </>
+                            ) : (
+                                <>
+                                    Submit for Review
+                                    <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                                </>
+                            )}
                         </Button>
                     </div>
                 </div>

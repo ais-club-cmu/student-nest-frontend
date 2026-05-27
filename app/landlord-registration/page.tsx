@@ -58,7 +58,9 @@ export default function LandlordRegistrationPage() {
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+        // National ID: digits only, max 16 characters
+        const sanitized = name === 'national_id' ? value.replace(/\D/g, '').slice(0, 16) : value;
+        setFormData((prev) => ({ ...prev, [name]: sanitized }));
         setError(null);
     };
 
@@ -215,17 +217,28 @@ export default function LandlordRegistrationPage() {
                                 <div className="relative">
                                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">badge</span>
                                     <input
-                                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
+                                        className="w-full pl-10 pr-12 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all dark:text-white"
                                         id="national_id"
                                         name="national_id"
-                                        placeholder="1 19XX X XXXXXXX X XX"
+                                        placeholder="1199XXXXXXXXXXX"
                                         type="text"
+                                        inputMode="numeric"
+                                        maxLength={16}
                                         value={formData.national_id}
                                         onChange={handleChange}
                                         required
                                     />
+                                    <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono tabular-nums ${
+                                        formData.national_id.length === 16
+                                            ? 'text-emerald-500'
+                                            : formData.national_id.length > 0
+                                            ? 'text-slate-400'
+                                            : 'text-slate-300 dark:text-slate-600'
+                                    }`}>
+                                        {formData.national_id.length}/16
+                                    </span>
                                 </div>
-                                <p className="text-[11px] text-slate-500 italic">Format: 16 digits as appearing on your ID card.</p>
+                                <p className="text-[11px] text-slate-500 italic">16 digits, numbers only — as printed on your Rwandan ID card.</p>
                             </div>
 
                             {/* Address */}
