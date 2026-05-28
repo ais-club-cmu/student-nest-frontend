@@ -158,6 +158,22 @@ export interface UserProfileResponse {
   mfa_enabled: boolean;
   last_login_at: string | null;
   created_at: string;
+  has_security_question?: boolean;
+}
+
+export interface SecurityQuestionSetRequest {
+  question: string;
+  answer: string;
+}
+
+export interface SecurityQuestionFetchResponse {
+  question: string;
+  has_security_question: boolean;
+}
+
+export interface SecurityQuestionVerifyResponse {
+  reset_token: string;
+  expires_in: number;
 }
 
 // ── Listings ──────────────────────────────────────────────────────────────────

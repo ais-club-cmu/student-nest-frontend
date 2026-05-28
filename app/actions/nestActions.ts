@@ -15,6 +15,9 @@ import type {
   PasswordResetRequest,
   RefreshRequest,
   RegisterResponse,
+  SecurityQuestionFetchResponse,
+  SecurityQuestionSetRequest,
+  SecurityQuestionVerifyResponse,
   StudentProfileUpdateRequest,
   StudentRegisterRequest,
   TokenResponse,
@@ -341,6 +344,61 @@ export async function getLandlordKycAction(accessToken: string, userId: string) 
   return nestRequest<LandlordKycDetail>(`/api/v1/auth/admin/kyc/${encodeURIComponent(userId)}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${accessToken}` },
+    cache: 'no-store',
+  });
+}
+
+/**
+ * Save a security question and hashed answer for the authenticated user.
+ *
+ * **Endpoint:** `POST /api/v1/auth/security-question/set` (bearer-protected)
+ *
+ * @param accessToken  JWT access token.
+ * @param body         `{ question, answer }`.
+ * @returns `ApiResult<MessageResponse>`.
+ */
+export async function setSecurityQuestionAction(accessToken: string, body: SecurityQuestionSetRequest) {
+  const result = await nestRequest<MessageResponse>('/api/v1/auth/security-question/set', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (result.data) afterProfileMutation();
+  return result;
+}
+
+/**
+ * Fetch the security question for a given email address (unauthenticated).
+ *
+ * **Endpoint:** `POST /api/v1/auth/security-question/fetch`
+ *
+ * @param email  The account email address.
+ * @returns `ApiResult<SecurityQuestionFetchResponse>`.
+ */
+export async function fetchSecurityQuestionAction(email: string) {
+  return nestRequest<SecurityQuestionFetchResponse>('/api/v1/auth/security-question/fetch', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    cache: 'no-store',
+  });
+}
+
+/**
+ * Verify the security question answer and receive a short-lived reset token.
+ *
+ * **Endpoint:** `POST /api/v1/auth/security-question/verify`
+ *
+ * Rate-limited server-side. Returns a reset_token on success.
+ *
+ * @param email   The account email address.
+ * @param answer  The user's answer to their security question.
+ * @returns `ApiResult<SecurityQuestionVerifyResponse>`.
+ */
+export async function verifySecurityQuestionAction(email: string, answer: string) {
+  return nestRequest<SecurityQuestionVerifyResponse>('/api/v1/auth/security-question/verify', {
+    method: 'POST',
+    body: JSON.stringify({ email, answer }),
     cache: 'no-store',
   });
 }
