@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { logoutAction } from '@/app/actions/nestActions';
 import { getNotificationsAction } from '@/app/actions/listingsActions';
+import { getConversationsAction } from '@/app/actions/conversationsActions';
 
 const STATIC_NAV_LINKS = [
     { label: 'Home', href: '/' },
@@ -23,6 +24,7 @@ export default function Header() {
     const [menuOpen, setMenuOpen] = useState(false);       // avatar dropdown
     const [drawerOpen, setDrawerOpen] = useState(false);   // mobile nav drawer
     const [unreadNotifs, setUnreadNotifs] = useState(0);
+    const [unreadMessages, setUnreadMessages] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -49,6 +51,34 @@ export default function Header() {
         const interval = setInterval(fetchUnreadCount, 30000);
         return () => clearInterval(interval);
     }, [isLoggedIn, userRole, fetchUnreadCount]);
+
+    // Poll unread message count — a conversation is "unread" when its
+    // last_message_at is newer than the last time the user opened it.
+    const fetchUnreadMessages = useCallback(async () => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        const result = await getConversationsAction(token);
+        if (!result.data) return;
+        const count = result.data.filter((conv) => {
+            if (!conv.last_message_at) return false;
+            // If backend returns unread_count, prefer that
+            if (typeof conv.unread_count === 'number') return conv.unread_count > 0;
+            // Otherwise fall back to comparing last_message_at with the stored read timestamp
+            const lastRead = localStorage.getItem(`lastReadAt_${conv.id}`) ?? conv.created_at;
+            return new Date(conv.last_message_at) > new Date(lastRead);
+        }).length;
+        setUnreadMessages(count);
+    }, []);
+
+    useEffect(() => {
+        if (!isLoggedIn || (userRole !== 'student' && userRole !== 'landlord')) {
+            setUnreadMessages(0);
+            return;
+        }
+        fetchUnreadMessages();
+        const interval = setInterval(fetchUnreadMessages, 15000);
+        return () => clearInterval(interval);
+    }, [isLoggedIn, userRole, fetchUnreadMessages]);
 
     // Close avatar dropdown when clicking outside
     useEffect(() => {
@@ -137,10 +167,15 @@ export default function Header() {
                                 <>
                                     <Link
                                         href={userRole === 'student' ? '/student-portal/conversations' : '/landlord/conversations'}
-                                        className="flex items-center justify-center w-9 h-9 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        className="relative flex items-center justify-center w-9 h-9 rounded-full text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                         aria-label="Messages"
                                     >
                                         <span className="material-symbols-outlined text-[20px]">forum</span>
+                                        {unreadMessages > 0 && (
+                                            <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none">
+                                                {unreadMessages > 9 ? '9+' : unreadMessages}
+                                            </span>
+                                        )}
                                     </Link>
                                     <Link
                                         href={userRole === 'student' ? '/student-portal/notifications' : '/landlord/notifications'}
@@ -306,10 +341,17 @@ export default function Header() {
                                     <Link
                                         href={userRole === 'student' ? '/student-portal/conversations' : '/landlord/conversations'}
                                         onClick={() => setDrawerOpen(false)}
-                                        className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                        className="flex items-center justify-between px-3 py-3 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                     >
-                                        <span className="material-symbols-outlined text-[18px] text-slate-500">forum</span>
-                                        Messages
+                                        <div className="flex items-center gap-3">
+                                            <span className="material-symbols-outlined text-[18px] text-slate-500">forum</span>
+                                            Messages
+                                        </div>
+                                        {unreadMessages > 0 && (
+                                            <span className="bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
+                                                {unreadMessages > 9 ? '9+' : unreadMessages}
+                                            </span>
+                                        )}
                                     </Link>
                                     <Link
                                         href={userRole === 'student' ? '/student-portal/notifications' : '/landlord/notifications'}

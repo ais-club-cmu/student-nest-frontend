@@ -6,6 +6,38 @@ import { createDraftAction, updateDraftStep1Action, getNeighborhoodsAction } fro
 import { handleAuthError } from '@/lib/auth-redirect';
 import type { NeighborhoodResponse, PropertyType, FloorLevel } from '@/lib/types/api.types';
 
+const KIGALI_SECTORS = [
+    'bumbogo', 'gatsata', 'gikomero', 'gisozi', 'jabana', 'jali', 'kacyiru',
+    'kibagabaga', 'kimihurura', 'kimironko', 'kinyinya', 'ndera', 'nduba',
+    'remera', 'rusororo', 'rutunga', 'gahanga', 'gatenga', 'gikondo', 'kagarama',
+    'kanombe', 'kicukiro', 'kigarama', 'masaka', 'niboye', 'nyarugunga', 'rebero',
+    'biryogo', 'gitega', 'kanyinya', 'kimisagara', 'mageragere', 'muhima',
+    'nyakabanda', 'nyamirambo', 'nyarugenge', 'rwezamenyo',
+];
+
+function validateAddress(addr: string): string | null {
+    const trimmed = addr.trim();
+    if (trimmed.length < 10) {
+        return 'Too short — include street, sector, and city, e.g. KG 15 Ave, Kacyiru, Kigali.';
+    }
+    const lower = trimmed.toLowerCase();
+    const hasKigali = lower.includes('kigali');
+    const hasComma = trimmed.includes(',');
+    const hasSector = KIGALI_SECTORS.some((s) => lower.includes(s));
+    const hasStreetCode = /\bk[gkn]\s*\d+\b/i.test(trimmed);
+
+    if (!hasKigali && !hasSector && !hasStreetCode) {
+        return 'This doesn\'t look like a Kigali address — try "KG 15 Ave, Kacyiru, Kigali" or "Kimihurura, Gasabo, Kigali".';
+    }
+    if (!hasComma) {
+        return 'Separate address parts with commas — e.g. KG 15 Ave, Kacyiru, Kigali.';
+    }
+    if (!hasKigali) {
+        return 'End with "Kigali" to confirm the city — e.g. ' + trimmed.replace(/,?\s*$/, '') + ', Kigali.';
+    }
+    return null;
+}
+
 const PROPERTY_TYPES: { value: PropertyType; label: string }[] = [
     { value: 'single_room', label: 'Single Room' },
     { value: 'shared_room', label: 'Shared Room' },
@@ -34,6 +66,7 @@ export default function AddListingStep1Page() {
     const [neighborhoodId, setNeighborhoodId] = useState('');
     const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
     const [floorLevel, setFloorLevel] = useState<FloorLevel | ''>('');
+    const [addressHint, setAddressHint] = useState<string | null>(null);
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken');
@@ -77,6 +110,9 @@ export default function AddListingStep1Page() {
         const token = localStorage.getItem('accessToken');
         if (!token) { router.push('/login'); return; }
 
+        const hint = validateAddress(fullAddress);
+        if (hint) { setAddressHint(hint); return; }
+
         setIsLoading(true);
         setError(null);
         setWarning(null);
@@ -94,7 +130,10 @@ export default function AddListingStep1Page() {
             setError(result.error.message);
             return;
         }
-        if (result.data?.warning) setWarning(result.data.warning);
+        if (result.data?.warning) {
+            setWarning(result.data.warning);
+            return;
+        }
         router.push('/add-listing/step-2');
     };
 
@@ -161,9 +200,33 @@ export default function AddListingStep1Page() {
                             </div>
                         )}
                         {warning && (
-                            <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                                <span className="material-symbols-outlined text-amber-500">warning</span>
-                                <p className="text-sm text-amber-700 dark:text-amber-400">{warning}</p>
+                            <div className="flex flex-col gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                <div className="flex items-start gap-3">
+                                    <span className="material-symbols-outlined text-amber-500 shrink-0 mt-0.5">warning</span>
+                                    <div>
+                                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Address warning</p>
+                                        <p className="text-sm text-amber-700 dark:text-amber-400 mt-0.5">{warning}</p>
+                                        <p className="text-xs text-amber-600 dark:text-amber-500 mt-1.5">
+                                            Tip: use a street code + sector + city — e.g. <span className="font-semibold">KG 15 Ave, Kacyiru, Kigali</span> or <span className="font-semibold">Kimihurura, Gasabo, Kigali</span>.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 mt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setWarning(null)}
+                                        className="flex-1 py-2 rounded-lg text-sm font-semibold border border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                                    >
+                                        Fix address
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.push('/add-listing/step-2')}
+                                        className="flex-1 py-2 rounded-lg text-sm font-semibold bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+                                    >
+                                        Continue anyway
+                                    </button>
+                                </div>
                             </div>
                         )}
 
@@ -178,12 +241,24 @@ export default function AddListingStep1Page() {
                                     required
                                     type="text"
                                     value={fullAddress}
-                                    onChange={(e) => setFullAddress(e.target.value)}
+                                    onChange={(e) => { setFullAddress(e.target.value); if (addressHint) setAddressHint(null); }}
+                                    onBlur={() => { if (fullAddress) setAddressHint(validateAddress(fullAddress)); }}
                                     placeholder="e.g. KG 15 Ave, Kacyiru, Kigali"
-                                    className="w-full pl-10 pr-4 h-12 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary text-sm transition-all outline-none"
+                                    className={`w-full pl-10 pr-4 h-12 rounded-lg border bg-slate-50 dark:bg-slate-800/50 text-slate-900 dark:text-slate-100 focus:ring-1 text-sm transition-all outline-none ${
+                                        addressHint
+                                            ? 'border-amber-400 focus:border-amber-400 focus:ring-amber-400'
+                                            : 'border-slate-200 dark:border-slate-700 focus:border-primary focus:ring-primary'
+                                    }`}
                                 />
                             </div>
-                            <p className="text-slate-400 text-xs">Include street, district, and city.</p>
+                            {addressHint ? (
+                                <p className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
+                                    <span className="material-symbols-outlined text-[14px] mt-0.5 shrink-0">info</span>
+                                    {addressHint}
+                                </p>
+                            ) : (
+                                <p className="text-slate-400 text-xs">Use street code + sector + city — e.g. KG 15 Ave, Kacyiru, Kigali or Kimihurura, Gasabo, Kigali.</p>
+                            )}
                         </div>
 
                         {/* Neighborhood */}

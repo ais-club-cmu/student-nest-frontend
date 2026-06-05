@@ -90,6 +90,8 @@ export default function ConversationsPane() {
             return;
         }
         setMessages(result.data ?? []);
+        // Mark as read once messages are loaded
+        localStorage.setItem(`lastReadAt_${convId}`, new Date().toISOString());
     }, []);
 
     useEffect(() => {
@@ -114,6 +116,8 @@ export default function ConversationsPane() {
 
     const handleSelect = (id: string) => {
         setSelectedId(id);
+        // Stamp as read so the header badge clears for this conversation
+        localStorage.setItem(`lastReadAt_${id}`, new Date().toISOString());
         setMessages([]);
         setMsgsError(null);
         setSendError(null);
@@ -145,6 +149,8 @@ export default function ConversationsPane() {
                     : c
             )
         );
+        // Sender has obviously read the conversation
+        localStorage.setItem(`lastReadAt_${selectedId}`, new Date().toISOString());
         await loadMessages(selectedId);
     };
 

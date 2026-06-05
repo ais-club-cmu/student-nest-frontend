@@ -30,6 +30,7 @@ export function validateField(name: string, value: string): string {
         case 'email':
             if (!value.trim()) return 'Email address is required.';
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Please enter a valid email address.';
+            if (!value.toLowerCase().endsWith('@andrew.cmu.edu')) return 'Only CMU addresses are accepted — use your name@andrew.cmu.edu email.';
             return '';
         case 'phone':
             if (value && !/^\+?[\d\s\-().]{7,20}$/.test(value)) return 'Please enter a valid phone number.';
