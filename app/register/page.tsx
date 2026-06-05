@@ -130,6 +130,15 @@ export default function RegisterPage() {
                     </p>
                 </div>
 
+                {/* CMU email notice */}
+                <div className="flex items-start gap-3 px-4 py-3 bg-primary/5 border border-primary/20 rounded-xl">
+                    <span className="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">school</span>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                        <span className="font-semibold">CMU students only.</span> You must register with your{' '}
+                        <span className="font-mono font-semibold text-primary">@andrew.cmu.edu</span> email address.
+                    </p>
+                </div>
+
                 <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
 
                     {/* API-level error */}

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { getUserProfileAction } from '@/app/actions/nestActions';
 import type { KycUploadResponse } from '@/lib/types/api.types';
 
 async function uploadKycDocument(
@@ -80,12 +81,35 @@ export default function LandlordIDVerificationPage() {
     const router = useRouter();
     const inputRefs = useRef<Partial<Record<string, HTMLInputElement>>>({});
 
+    const [activeDocTypes, setActiveDocTypes] = useState(DOC_TYPES);
     const [slots, setSlots] = useState<Record<string, DocSlot>>(
         Object.fromEntries(DOC_TYPES.map((dt) => [dt.value, emptySlot()]))
     );
     const [dragging, setDragging] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [globalError, setGlobalError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const token = localStorage.getItem('accessToken');
+        if (!token) { router.push('/login'); return; }
+
+        const applyRole = (role: string) => {
+            if (role === 'student') {
+                const studentDocs = DOC_TYPES.filter((d) => d.value === 'national_id');
+                setActiveDocTypes(studentDocs);
+                setSlots(Object.fromEntries(studentDocs.map((dt) => [dt.value, emptySlot()])));
+            }
+        };
+
+        const storedRole = localStorage.getItem('userRole');
+        if (storedRole) {
+            applyRole(storedRole);
+        } else {
+            getUserProfileAction(token).then((r) => {
+                if (r.data?.role) applyRole(r.data.role);
+            });
+        }
+    }, [router]);
 
     const validate = (f: File): string | null => {
         if (!ACCEPTED_TYPES.includes(f.type)) return 'Only JPG, PNG, or PDF files are accepted.';
@@ -134,7 +158,7 @@ export default function LandlordIDVerificationPage() {
         if (input) input.value = '';
     };
 
-    const allSlotsReady = DOC_TYPES.every((dt) => {
+    const allSlotsReady = activeDocTypes.every((dt) => {
         const s = slots[dt.value];
         return s.status === 'done' || (s.file !== null && s.status !== 'uploading');
     });
@@ -143,7 +167,7 @@ export default function LandlordIDVerificationPage() {
         const accessToken = localStorage.getItem('accessToken');
         if (!accessToken) { router.push('/login'); return; }
 
-        const toUpload = DOC_TYPES.filter(
+        const toUpload = activeDocTypes.filter(
             (dt) => slots[dt.value].file && slots[dt.value].status !== 'done'
         );
         if (toUpload.length === 0) return;
@@ -187,8 +211,8 @@ export default function LandlordIDVerificationPage() {
         }
     };
 
-    const uploadedCount = DOC_TYPES.filter((dt) => slots[dt.value].status === 'done').length;
-    const totalCount = DOC_TYPES.length;
+    const uploadedCount = activeDocTypes.filter((dt) => slots[dt.value].status === 'done').length;
+    const totalCount = activeDocTypes.length;
 
     return (
         <div className="flex flex-1 justify-center py-10 px-4 min-h-[calc(100vh-80px)]">
@@ -215,7 +239,7 @@ export default function LandlordIDVerificationPage() {
                     <div>
                         <h1 className="text-slate-900 dark:text-white text-3xl font-bold leading-tight mb-2">Verify your identity</h1>
                         <p className="text-slate-500 dark:text-slate-400 text-base leading-relaxed">
-                            Upload both documents below before submitting. All files are encrypted and only accessible to verified staff.
+                            Upload the required document{activeDocTypes.length > 1 ? 's' : ''} below before submitting. All files are encrypted and only accessible to verified staff.
                         </p>
                     </div>
 
@@ -230,7 +254,7 @@ export default function LandlordIDVerificationPage() {
 
                     {/* Progress pills */}
                     <div className="flex items-center gap-3">
-                        {DOC_TYPES.map((dt) => {
+                        {activeDocTypes.map((dt) => {
                             const s = slots[dt.value];
                             const done = s.status === 'done';
                             const hasFile = !!s.file;

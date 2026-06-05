@@ -9,9 +9,6 @@ import type { UtilityType, LeaseDuration } from '@/lib/types/api.types';
 const UTILITIES: { value: UtilityType; label: string; icon: string }[] = [
     { value: 'electricity', label: 'Electricity', icon: 'bolt' },
     { value: 'water', label: 'Water', icon: 'water_drop' },
-    { value: 'gas', label: 'Gas', icon: 'local_fire_department' },
-    { value: 'security', label: 'Security', icon: 'security' },
-    { value: 'garbage', label: 'Garbage Collection', icon: 'delete' },
 ];
 
 const LEASE_DURATIONS: { value: LeaseDuration; label: string }[] = [

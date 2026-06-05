@@ -714,6 +714,7 @@ export default function AdminDashboardPage() {
         setBusyId(user.user_id);
         const result = await approveLandlordKycAction(token, user.user_id);
         setBusyId(null);
+        setReviewTarget(null);
         if (result.error) {
             if (handleAuthError(result.error, router)) return;
             showToast(result.error.message, false);
@@ -726,10 +727,10 @@ export default function AdminDashboardPage() {
     const handleReject = async (user: PendingKycUser, reason: string) => {
         const token = getToken();
         if (!token) return;
-        setReviewTarget(null);
         setBusyId(user.user_id);
         const result = await rejectLandlordKycAction(token, user.user_id, reason);
         setBusyId(null);
+        setReviewTarget(null);
         if (result.error) {
             if (handleAuthError(result.error, router)) return;
             showToast(result.error.message, false);

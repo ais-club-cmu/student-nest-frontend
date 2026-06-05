@@ -469,6 +469,7 @@ export interface ConversationSummary {
   student_name: string;
   last_message_at: string | null;
   last_message_preview: string | null;
+  unread_count?: number;
   created_at: string;
 }
 
