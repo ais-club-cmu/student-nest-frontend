@@ -183,7 +183,20 @@ export type FloorLevel = 'ground' | 'first' | 'second' | 'third' | 'fourth_plus'
 export type ListingStatus = 'draft' | 'pending_review' | 'active' | 'filled' | 'archived';
 export type ListingType = 'standard' | 'torch_pass';
 export type CalendarStatus = 'available' | 'occupied' | 'unavailable';
-export type UtilityType = 'electricity' | 'water' | 'gas' | 'security' | 'garbage';
+export type UtilityType =
+  | 'wifi'
+  | 'internet'
+  | 'water'
+  | 'electricity'
+  | 'gas'
+  | 'garbage'
+  | 'security'
+  | 'security_guard'
+  | 'cleaning'
+  | 'cleaning_housekeeper'
+  | 'parking'
+  | 'backup_generator'
+  | 'washing_machine';
 export type LeaseDuration = '1_month' | '3_months' | '6_months' | '12_months' | 'flexible';
 export type SmokingPolicy = 'allowed' | 'no_smoking' | 'outside_only';
 export type GenderPreference = 'female_only' | 'male_only' | 'no_preference';

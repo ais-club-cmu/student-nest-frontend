@@ -7,8 +7,19 @@ import { handleAuthError } from '@/lib/auth-redirect';
 import type { UtilityType, LeaseDuration } from '@/lib/types/api.types';
 
 const UTILITIES: { value: UtilityType; label: string; icon: string }[] = [
-    { value: 'electricity', label: 'Electricity', icon: 'bolt' },
-    { value: 'water', label: 'Water', icon: 'water_drop' },
+    { value: 'wifi',                  label: 'Wi-Fi',               icon: 'wifi' },
+    { value: 'internet',              label: 'Internet',             icon: 'lan' },
+    { value: 'water',                 label: 'Water',                icon: 'water_drop' },
+    { value: 'electricity',           label: 'Electricity',          icon: 'bolt' },
+    { value: 'gas',                   label: 'Gas',                  icon: 'local_fire_department' },
+    { value: 'garbage',               label: 'Garbage Collection',   icon: 'delete' },
+    { value: 'security',              label: 'Security System',      icon: 'security' },
+    { value: 'security_guard',        label: 'Security Guard',       icon: 'shield_person' },
+    { value: 'cleaning',              label: 'Cleaning',             icon: 'cleaning_services' },
+    { value: 'cleaning_housekeeper',  label: 'Housekeeper',          icon: 'chair' },
+    { value: 'parking',               label: 'Parking',              icon: 'local_parking' },
+    { value: 'backup_generator',      label: 'Backup Generator',     icon: 'electric_bolt' },
+    { value: 'washing_machine',       label: 'Washing Machine',      icon: 'local_laundry_service' },
 ];
 
 const LEASE_DURATIONS: { value: LeaseDuration; label: string }[] = [

@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { updateDraftStep5Action } from '@/app/actions/listingsActions';
+import { updateDraftStep5Action, getDraftAction } from '@/app/actions/listingsActions';
 import { handleAuthError } from '@/lib/auth-redirect';
-import type { GenderPreference, PetsAllowed, SmokingPolicy, VisitorPolicy } from '@/lib/types/api.types';
+import type { GenderPreference, PetsAllowed, PropertyType, SmokingPolicy, VisitorPolicy } from '@/lib/types/api.types';
 
 export default function AddListingStep5Page() {
     const router = useRouter();
     const [listingId, setListingId] = useState<string | null>(null);
+    const [propertyType, setPropertyType] = useState<PropertyType | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +26,21 @@ export default function AddListingStep5Page() {
         const id = sessionStorage.getItem('currentDraftId');
         if (!id) { router.replace('/add-listing'); return; }
         setListingId(id);
+        const token = localStorage.getItem('accessToken');
+        if (!token) return;
+        getDraftAction(token, id).then((r) => {
+            if (r.data?.property_type) setPropertyType(r.data.property_type);
+        });
     }, [router]);
+
+    const allowGenderRestriction = propertyType === 'single_room' || propertyType === 'shared_room';
+
+    // Reset to no_preference when the property type doesn't support gender restrictions
+    useEffect(() => {
+        if (propertyType && !allowGenderRestriction) {
+            setGenderPreference('no_preference');
+        }
+    }, [propertyType, allowGenderRestriction]);
 
     const handleSubmit = async () => {
         if (!listingId) return;
@@ -105,31 +120,51 @@ export default function AddListingStep5Page() {
 
                         {/* Gender Preference */}
                         <section>
-                            <div className="flex items-center gap-2 mb-3">
+                            <div className="flex items-center gap-2 mb-1">
                                 <span className="material-symbols-outlined text-primary">group</span>
                                 <h3 className="font-bold text-slate-900 dark:text-slate-100">Gender Preference</h3>
                             </div>
+                            {!allowGenderRestriction && propertyType && (
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                                    Male-only and female-only options are only available for single rooms and shared rooms.
+                                </p>
+                            )}
+                            {!propertyType && (
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">&nbsp;</p>
+                            )}
+                            {allowGenderRestriction && <div className="mb-3" />}
                             <div className="grid grid-cols-3 gap-3">
                                 {([
                                     { value: 'male_only', label: 'Male Only', icon: 'male' },
                                     { value: 'female_only', label: 'Female Only', icon: 'female' },
                                     { value: 'no_preference', label: 'No Preference', icon: 'diversity_3' },
-                                ] as { value: GenderPreference; label: string; icon: string }[]).map((opt) => (
-                                    <label
-                                        key={opt.value}
-                                        className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                            genderPreference === opt.value
-                                                ? 'border-primary bg-primary/5 text-primary'
-                                                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary/40'
-                                        }`}
-                                    >
-                                        <input type="radio" className="sr-only" name="gender" value={opt.value}
-                                            checked={genderPreference === opt.value}
-                                            onChange={() => setGenderPreference(opt.value)} />
-                                        <span className="material-symbols-outlined text-2xl">{opt.icon}</span>
-                                        <span className="text-sm font-semibold">{opt.label}</span>
-                                    </label>
-                                ))}
+                                ] as { value: GenderPreference; label: string; icon: string }[]).map((opt) => {
+                                    const restricted = (opt.value === 'male_only' || opt.value === 'female_only') && !allowGenderRestriction;
+                                    return (
+                                        <label
+                                            key={opt.value}
+                                            className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${
+                                                restricted
+                                                    ? 'cursor-not-allowed opacity-35 border-slate-200 dark:border-slate-700 text-slate-400'
+                                                    : genderPreference === opt.value
+                                                    ? 'cursor-pointer border-primary bg-primary/5 text-primary'
+                                                    : 'cursor-pointer border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary/40'
+                                            }`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                className="sr-only"
+                                                name="gender"
+                                                value={opt.value}
+                                                checked={genderPreference === opt.value}
+                                                disabled={restricted}
+                                                onChange={() => !restricted && setGenderPreference(opt.value)}
+                                            />
+                                            <span className="material-symbols-outlined text-2xl">{opt.icon}</span>
+                                            <span className="text-sm font-semibold">{opt.label}</span>
+                                        </label>
+                                    );
+                                })}
                             </div>
                         </section>
 
